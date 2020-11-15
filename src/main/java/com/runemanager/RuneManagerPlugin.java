@@ -1,25 +1,26 @@
 package com.runemanager;
 
 import com.google.common.base.Strings;
-import com.google.gson.*;
 import com.google.inject.Provides;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
 import net.runelite.api.events.*;
 import net.runelite.api.widgets.Widget;
-import net.runelite.client.RuneLite;
+import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.chat.*;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.NpcLootReceived;
 import net.runelite.client.game.ItemStack;
+import net.runelite.client.game.WorldService;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.game.ItemManager;
+import net.runelite.http.api.worlds.World;
+import net.runelite.http.api.worlds.WorldResult;
+import net.runelite.http.api.worlds.WorldType;
 
-import net.runelite.client.plugins.chatcommands.ChatCommandsConfig;
-import net.runelite.client.plugins.chatcommands.ChatKeyboardListener;
 import okhttp3.*;
 
 import javax.inject.Inject;
@@ -28,6 +29,8 @@ import java.io.*;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import static net.runelite.api.widgets.WidgetID.*;
 
 @PluginDescriptor(
 		name = "1RuneManager",
@@ -60,38 +63,52 @@ public class RuneManagerPlugin extends Plugin {
 	@Inject
 	private ChatMessageManager chatMessageManager;
 
+	@Inject
+	private WorldService worldService;
+
+	private boolean onLeagueWorld;
+	private boolean loggedIn = false;
 	private static final String AUTH_COMMAND_STRING = "!auth";
 	private AvailableCollections[] collections = null;
+	private boolean collectionLogOpen;
+	private int previousCollectionLogValue;
+	private boolean levelUp;
 	private static final Pattern UNIQUES_OBTAINED_PATTERN = Pattern.compile("Obtained: <col=(.+?)>([0-9]+)/([0-9]+)</col>");
 	private static final Pattern KILL_COUNT_PATTERN = Pattern.compile("(.+?): <col=(.+?)>([0-9]+)</col>");
 	private static final Pattern ITEM_NAME_PATTERN = Pattern.compile("<col=(.+?)>(.+?)</col>");
+	private static final Pattern LEVEL_UP_PATTERN = Pattern.compile(".*Your ([a-zA-Z]+) (?:level is|are)? now (\\d+)\\.");
 
 	@Override
 	protected void startUp() {
-		if (!Strings.isNullOrEmpty(runeManagerConfig.url())) {
-			if (userController.logIn()) {
-				chatCommandManager.registerCommandAsync(AUTH_COMMAND_STRING, this::authenticatePlayer);
+		loggedIn = userController.logIn();
 
-				if (collections == null) {
-					System.out.println("HENTER BOSS OVERSIKT");
+		chatCommandManager.registerCommandAsync(AUTH_COMMAND_STRING, this::authenticatePlayer);
 
-					collections = controller.getBossOverview();
-
-					for (AvailableCollections availableCollections : collections) {
-						System.out.println(availableCollections.getName());
-					}
-				}
-			} else {
-				System.out.println("Could not log in to RuneManager");
-			}
+		if (collections == null && !Strings.isNullOrEmpty(runeManagerConfig.url())) {
+			collections = controller.getBossOverview();
 		}
+
+		clientThread.invoke(() ->
+		{
+			if (client.getGameState() == GameState.LOGGED_IN)
+			{
+				if (loggedIn)
+				{
+					sendChatMessage("You are logged in to RuneManager");
+				} else {
+					sendChatMessage("You are NOT logged in to RuneManager");
+				}
+			}
+		});
 	}
 
 	@Override
-	public void shutDown() {
+	protected void shutDown() {
 		userController.authToken = null;
 
 		chatCommandManager.unregisterCommand(AUTH_COMMAND_STRING);
+
+		System.out.println("Successfully logged out");
 	}
 
 	@Provides
@@ -102,96 +119,252 @@ public class RuneManagerPlugin extends Plugin {
 
 	private void authenticatePlayer(ChatMessage chatMessage, String message)
 	{
-		if (!Strings.isNullOrEmpty(userController.authToken)) {
-			if (!Strings.isNullOrEmpty(runeManagerConfig.url())
-				&& !Strings.isNullOrEmpty(runeManagerConfig.username())
-				&& !Strings.isNullOrEmpty(runeManagerConfig.password())) {
-				String authCode = message.substring(AUTH_COMMAND_STRING.length() + 1);
-				String accountType = client.getAccountType().name().toLowerCase();
+		if (!loggedIn) {
+			sendChatMessage("You have to be logged in to authenticate this account with RuneManager");
 
-				RequestBody formBody = new FormBody.Builder()
-						.add("username", client.getLocalPlayer().getName())
-						.add("code", authCode)
-						.add("account_type", accountType)
-						.build();
+			return;
+		}
 
-				Request request = new Request.Builder()
-						.url(runeManagerConfig.url() + "/api/authenticate")
-						.addHeader("Authorization", "Bearer " + userController.authToken)
-						.post(formBody)
-						.build();
+		System.out.println(userController.authToken);
 
-				sendChatMessage("Attempting to authenticate account " + client.getLocalPlayer().getName() + " with user " + runeManagerConfig.username());
+		String authCode = message.substring(AUTH_COMMAND_STRING.length() + 1);
+		String accountType = client.getAccountType().name().toLowerCase();
 
-				OkHttpClient httpClient = new OkHttpClient();
+		RequestBody formBody = new FormBody.Builder()
+				.add("username", client.getLocalPlayer().getName())
+				.add("code", authCode)
+				.add("account_type", accountType)
+				.build();
 
-				try (Response response = httpClient.newCall(request).execute()) {
-					if (!response.isSuccessful()) throw new IOException("Unexpected code " + response);
+		Request request = new Request.Builder()
+				.url(runeManagerConfig.url() + "/api/authenticate")
+				.addHeader("Authorization", "Bearer " + userController.authToken)
+				.post(formBody)
+				.build();
 
-					sendChatMessage(response.body().string());
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-			}
-		} else {
-			sendChatMessage("You are not logged in to RuneManager");
+		sendChatMessage("Attempting to authenticate account " + client.getLocalPlayer().getName() + " with user " + runeManagerConfig.username() + " to RuneManager");
+
+		OkHttpClient httpClient = new OkHttpClient();
+
+		try (Response response = httpClient.newCall(request).execute()) {
+			if (!response.isSuccessful()) throw new IOException("Unexpected code " + response);
+
+			sendChatMessage(response.body().string());
+		} catch (IOException e) {
+			e.printStackTrace();
 		}
 	}
 
 	@Subscribe
-	public void onGameStateChanged(GameStateChanged gameStateChanged) {
+	private void onGameStateChanged(GameStateChanged gameStateChanged) {
 		if (gameStateChanged.getGameState() == GameState.LOGGED_IN) {
-			if (!Strings.isNullOrEmpty(userController.authToken)) {
-				sendChatMessage("You are logged in to RuneManager");
-			} else {
-				sendChatMessage("You are NOT logged in to RuneManager");
+			onLeagueWorld = isLeagueWorld(client.getWorld());
+		}
+	}
+
+	private boolean isLeagueWorld(int worldNumber)
+	{
+		WorldResult worlds = worldService.getWorlds();
+		if (worlds == null)
+		{
+			return false;
+		}
+
+		World world = worlds.findWorld(worldNumber);
+		return world != null && world.getTypes().contains(WorldType.LEAGUE);
+	}
+
+	/**
+	 * Checks if killed NPC is available for loot tracking, and creates a loot stack ready for submission
+	 *
+	 * @param npcLootReceived Loot received from NPC
+	 */
+	@Subscribe
+	private void onNpcLootReceived(final NpcLootReceived npcLootReceived) throws IOException {
+		if (!loggedIn) {
+			sendChatMessage("You have to be logged in to submit to RuneManager");
+
+			return;
+		}
+
+		if (onLeagueWorld) {
+			sendChatMessage("You have to be logged in to a normal world to submit to RuneManager");
+
+			return;
+		}
+
+		final NPC npc = npcLootReceived.getNpc();
+
+		// Find if NPC is available for loot tracking
+		for (AvailableCollections availableCollections : collections) {
+			if (availableCollections.getName().equals(npc.getName().toLowerCase())) {
+				final String name = npc.getName();
+				final Collection<ItemStack> items = npcLootReceived.getItems(); // Received items
+
+				createLootStack(name, items);
+
+				break;
 			}
 		}
 	}
 
-	@Subscribe
-	public void onNpcLootReceived(final NpcLootReceived npcLootReceived) throws IOException {
-		if (!Strings.isNullOrEmpty(userController.authToken)) {
-			final NPC npc = npcLootReceived.getNpc();
+	/**
+	 * Loops through loot stack and renames item names compliant with RuneManager API, and then submits loot to RuneManager
+	 *
+	 * @param collectionName NPC name
+	 * @param items Loot received from NPC
+	 */
+	private void createLootStack(String collectionName, final Collection<ItemStack> items) throws IOException {
+		// itemName, itemQuantity
+		LinkedHashMap<String,Integer> loot = new LinkedHashMap<String, Integer>();
 
-			// Find if NPC is available for loot tracking
-			for (AvailableCollections availableCollections : collections) {
-				if (availableCollections.getName().equals(npc.getName().toLowerCase())) {
-					final String name = npc.getName();
-					final Collection<ItemStack> items = npcLootReceived.getItems();
+		final LootItem[] entries = buildEntries(stack(items));
 
-					createLootStack(name, items);
+		// Rename item names
+		for (LootItem item : entries) {
+			String itemName = item.getName();
+			int itemQuantity = item.getQuantity();
+
+			itemName = itemName.replace(" ", "_").replaceAll("[+.^:,']","").toLowerCase();
+
+			loot.put(itemName, itemQuantity);
+		}
+
+		sendChatMessage(controller.postLootStack(client.getLocalPlayer().getName(), collectionName, loot, userController.authToken));
+	}
+
+	private LootItem[] buildEntries(final Collection<ItemStack> itemStacks)
+	{
+		return itemStacks.stream()
+				.map(itemStack -> buildLootItem(itemStack.getId(), itemStack.getQuantity()))
+				.toArray(LootItem[]::new);
+	}
+
+	private LootItem buildLootItem(int itemId, int quantity)
+	{
+		final ItemComposition itemComposition = itemManager.getItemComposition(itemId);
+
+		return new LootItem(
+				itemId,
+				itemComposition.getName(),
+				quantity);
+	}
+
+	private static Collection<ItemStack> stack(Collection<ItemStack> items)
+	{
+		final List<ItemStack> list = new ArrayList<>();
+
+		for (final ItemStack item : items)
+		{
+			int quantity = 0;
+			for (final ItemStack i : list)
+			{
+				if (i.getId() == item.getId())
+				{
+					quantity = i.getQuantity();
+					list.remove(i);
+					break;
 				}
 			}
-		}
-	}
-
-	private boolean collectionLogOpen = false;
-	private int previousCollectionLogValue;
-	@Subscribe
-	public void onWidgetLoaded(WidgetLoaded event) {
-		if (!Strings.isNullOrEmpty(userController.authToken)) {
-			if (event.getGroupId() != 621) {
-				collectionLogOpen = false;
-				return;
+			if (quantity > 0)
+			{
+				list.add(new ItemStack(item.getId(), item.getQuantity() + quantity, item.getLocation()));
 			}
-
-			collectionLogOpen = true;
-		}
-	}
-	@Subscribe
-	public void onVarbitChanged(VarbitChanged event) {
-		if (collectionLogOpen) {
-			int collectionLogValue = client.getVarbitValue(6906);
-			if (collectionLogValue != previousCollectionLogValue) {
-				getCurrentCollectionLogHeaderData();
-
-				previousCollectionLogValue = collectionLogValue;
+			else
+			{
+				list.add(item);
 			}
 		}
+
+		return list;
 	}
 
-	public void getCurrentCollectionLogHeaderData() {
+	@Subscribe
+	private void onWidgetLoaded(WidgetLoaded event) {
+		if (loggedIn && !onLeagueWorld) {
+			int groupId = event.getGroupId();
+
+			switch (groupId) {
+				case 621: {
+					collectionLogOpen = true;
+					return;
+				}
+				case LEVEL_UP_GROUP_ID: {
+					levelUp = true;
+					return;
+				}
+				default:
+					return;
+			}
+		}
+	}
+
+	@Subscribe
+	private void onGameTick(GameTick event) throws IOException {
+		if (!levelUp)
+		{
+			return;
+		}
+
+		levelUp = false;
+
+		HashMap<String, String> levelUpData = new HashMap<String, String>();
+
+		// If level up, parse level up data from level up widget
+		if (client.getWidget(WidgetInfo.LEVEL_UP_LEVEL) != null) {
+			System.out.println("test");
+			levelUpData = parseLevelUpWidget(WidgetInfo.LEVEL_UP_LEVEL);
+			//controller.postLevelUp(client.getLocalPlayer().getName(), skill, userController.authToken);
+		}
+
+		// Submit level up data
+		if (!levelUpData.isEmpty()) {
+			System.out.println(levelUpData.get("level"));
+			sendChatMessage(controller.postLevelUp(client.getLocalPlayer().getName(), levelUpData, userController.authToken));
+		}
+		//controller.postLevelUp(levelUpData, client.getLocalPlayer().getName(), userController.authToken);
+	}
+
+	private HashMap<String, String> parseLevelUpWidget(WidgetInfo levelUpLevel)
+	{
+		Widget levelChild = client.getWidget(levelUpLevel);
+		if (levelChild == null)
+		{
+			return null;
+		}
+
+		Matcher m = LEVEL_UP_PATTERN.matcher(levelChild.getText());
+		if (!m.matches())
+		{
+			return null;
+		}
+
+		HashMap<String, String> levelUpData = new HashMap<String, String>();
+
+		System.out.println(m.group(1).toLowerCase());
+
+		levelUpData.put("name", m.group(1).toLowerCase());
+		levelUpData.put("level", m.group(2));
+		//levelUpData.put("xp", "123");
+		return levelUpData;
+	}
+
+	@Subscribe
+	private void onVarbitChanged(VarbitChanged event) {
+		if (!collectionLogOpen)
+		{
+			return;
+		}
+
+		int collectionLogValue = client.getVarbitValue(6906);
+		if (collectionLogValue != previousCollectionLogValue) {
+			getCurrentCollectionLogHeaderData();
+
+			previousCollectionLogValue = collectionLogValue;
+		}
+	}
+
+	private void getCurrentCollectionLogHeaderData() {
 		clientThread.invokeLater(() ->
 		{
 			final Widget collectionLogHeader = client.getWidget(621, 19); // Right widget header panel
@@ -253,11 +426,7 @@ public class RuneManagerPlugin extends Plugin {
 				itemName = itemNameMatcher.group(2);
 			}
 
-			System.out.println("GAMMELT NAVN " + itemName);
-
 			itemName = itemName.replace(" ", "_").replaceAll("[+.^:,']","").toLowerCase();
-
-			System.out.println("NYTT NAVN " + itemName);
 
 			if (item.getOpacity() == 0) {
 				itemQuantity = item.getItemQuantity();
@@ -269,143 +438,17 @@ public class RuneManagerPlugin extends Plugin {
 		sendChatMessage(controller.postCollectionLog(client.getLocalPlayer().getName(), collectionName, items, userController.authToken));
 	}
 
-	public void createLootStack(String collectionName, final Collection<ItemStack> items) throws IOException {
-		LinkedHashMap<String,Integer> loot = new LinkedHashMap<String, Integer>();
-
-		final LootItem[] entries = buildEntries(stack(items));
-
-		for (LootItem item : entries) {
-			String itemName = item.getName();
-			int itemQuantity = item.getQuantity();
-
-			System.out.println("GAMMELT NAVN " + itemName);
-
-			itemName = itemName.replace(" ", "_").replaceAll("[+.^:,']","").toLowerCase();
-
-			System.out.println("NYTT NAVN " + itemName);
-
-			loot.put(itemName, itemQuantity);
-		}
-
-		sendChatMessage(controller.postLootStack(client.getLocalPlayer().getName(), collectionName, loot, userController.authToken));
-	}
-
-	private LootItem[] buildEntries(final Collection<ItemStack> itemStacks)
-	{
-		return itemStacks.stream()
-			.map(itemStack -> buildLootItem(itemStack.getId(), itemStack.getQuantity()))
-			.toArray(LootItem[]::new);
-	}
-
-	private LootItem buildLootItem(int itemId, int quantity)
-	{
-		final ItemComposition itemComposition = itemManager.getItemComposition(itemId);
-
-		return new LootItem(
-			itemId,
-			itemComposition.getName(),
-			quantity);
-	}
-
-	private static Collection<ItemStack> stack(Collection<ItemStack> items)
-	{
-		final List<ItemStack> list = new ArrayList<>();
-
-		for (final ItemStack item : items)
-		{
-			int quantity = 0;
-			for (final ItemStack i : list)
-			{
-				if (i.getId() == item.getId())
-				{
-					quantity = i.getQuantity();
-					list.remove(i);
-					break;
-				}
-			}
-			if (quantity > 0)
-			{
-				list.add(new ItemStack(item.getId(), item.getQuantity() + quantity, item.getLocation()));
-			}
-			else
-			{
-				list.add(item);
-			}
-		}
-
-		return list;
-	}
-
 	private void sendChatMessage(String chatMessage)
 	{
 		final String message = new ChatMessageBuilder()
-				.append(ChatColorType.HIGHLIGHT)
-				.append(chatMessage)
-				.build();
+			.append(ChatColorType.HIGHLIGHT)
+			.append(chatMessage)
+			.build();
 
 		chatMessageManager.queue(
-				QueuedMessage.builder()
-						.type(ChatMessageType.CONSOLE)
-						.runeLiteFormattedMessage(message)
-						.build());
-	}
-
-	private void makeModel(String bossName, LinkedHashMap<String,Integer> loot) throws IOException {
-		String fileName = RuneLite.RUNELITE_DIR + "\\model\\" + bossName.replace(" ", "") + ".php";
-		purgeList(fileName);
-
-		FileWriter writer = new FileWriter(fileName, true);
-
-		writer.write("<?php\n");
-		writer.write("\r\n");
-		writer.write("namespace App\\Boss;\r\n");
-		writer.write("\r\n");
-		writer.write("use Illuminate\\Database\\Eloquent\\Model;\r\n");
-		writer.write("\r\n");
-		writer.write("class " + (bossName.substring(0, 1).toUpperCase() + bossName.substring(1)).replace(" ", "") + " extends Model\r\n");
-		writer.write("{\r\n");
-		writer.write("    protected $table = '" + bossName.toLowerCase().replaceAll(" ", "_") + "';\r\n");
-		writer.write("\r\n");
-		writer.write("    protected $fillable = [\r\n");
-		//writer.write("        'obtained',\r\n");
-		//writer.write("        'kill_count',\r\n");
-		for (HashMap.Entry me : loot.entrySet()) {
-			System.out.println("Key: "+me.getKey() + " & Value: " + me.getValue());
-			String key = me.getKey().toString();
-			writer.write("        '" + key + "',\r\n");
-		}
-		writer.write("    ];\r\n");
-		writer.write("\r\n");
-		writer.write("    protected $hidden = ['user_id'];\n");
-		writer.write("}\r\n");
-
-		writer.close();
-
-		makeMigration(bossName.replace(" ", ""), loot);
-	}
-
-	private void makeMigration(String bossName, LinkedHashMap<String,Integer> loot) throws IOException {
-		String fileName = RuneLite.RUNELITE_DIR + "\\migration\\" + bossName + " migration.php";
-		purgeList(fileName);
-
-		FileWriter writer = new FileWriter(fileName, true);
-
-		writer.write("$table->id();\r\n");
-		writer.write("$table->integer('user_id')->unsigned()->unique();\r\n");
-		//writer.write("$table->integer('obtained')->default(0)->unsigned();\r\n");
-		//writer.write("$table->integer('kill_count')->default(0)->unsigned();\r\n");
-		for (HashMap.Entry me : loot.entrySet()) {
-			System.out.println("Key: "+me.getKey() + " & Value: " + me.getValue());
-			String key = me.getKey().toString();
-			writer.write("$table->integer('"+key+"')->default(0)->unsigned();" + "\r\n");
-		}
-		writer.write("$table->timestamps();");
-
-		writer.close();
-	}
-
-	private void purgeList(String fileName) {
-		File purge = new File(fileName);
-		purge.delete();
+			QueuedMessage.builder()
+				.type(ChatMessageType.CONSOLE)
+				.runeLiteFormattedMessage(message)
+				.build());
 	}
 }
