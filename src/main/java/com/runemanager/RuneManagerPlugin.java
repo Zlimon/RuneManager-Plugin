@@ -47,9 +47,6 @@ public class RuneManagerPlugin extends Plugin
 	private RuneManagerConfig runeManagerConfig;
 
 	@Inject
-	private UserController userController;
-
-	@Inject
 	private Controller controller;
 
 	@Inject
@@ -82,7 +79,7 @@ public class RuneManagerPlugin extends Plugin
 	@Override
 	protected void startUp()
 	{
-		loggedIn = userController.logIn();
+		loggedIn = controller.logIn();
 
 		chatCommandManager.registerCommandAsync(AUTH_COMMAND_STRING, this::authenticatePlayer);
 
@@ -110,7 +107,7 @@ public class RuneManagerPlugin extends Plugin
 	@Override
 	protected void shutDown()
 	{
-		userController.authToken = null;
+		controller.logOut();
 
 		chatCommandManager.unregisterCommand(AUTH_COMMAND_STRING);
 
@@ -132,8 +129,6 @@ public class RuneManagerPlugin extends Plugin
 			return;
 		}
 
-		System.out.println(userController.authToken);
-
 		String authCode = message.substring(AUTH_COMMAND_STRING.length() + 1);
 		String accountType = client.getAccountType().name().toLowerCase();
 
@@ -145,7 +140,7 @@ public class RuneManagerPlugin extends Plugin
 
 		Request request = new Request.Builder()
 			.url(runeManagerConfig.url() + "/api/authenticate")
-			.addHeader("Authorization", "Bearer " + userController.authToken)
+			.addHeader("Authorization", "Bearer " + controller.getAuthToken())
 			.post(formBody)
 			.build();
 
@@ -304,7 +299,7 @@ public class RuneManagerPlugin extends Plugin
 	@Subscribe
 	private void onWidgetLoaded(WidgetLoaded event)
 	{
-		if (loggedIn && !onLeagueWorld)
+		if (loggedIn)
 		{
 			int groupId = event.getGroupId();
 

@@ -1,7 +1,9 @@
 package com.runemanager;
 
+import com.google.common.base.Strings;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonPrimitive;
 import net.runelite.api.Client;
 import okhttp3.*;
 
@@ -15,13 +17,82 @@ public class Controller
 	@Inject
 	private RuneManagerConfig runeManagerConfig;
 
-	@Inject
-	private UserController userController;
-
+	private String authToken;
 	private final OkHttpClient httpClient = new OkHttpClient();
 	private final Gson gson = new Gson();
 	private static final MediaType MEDIA_TYPE_MARKDOWN
 		= MediaType.parse("application/json; charset=utf-8");
+
+	public boolean logIn()
+	{
+		if (Strings.isNullOrEmpty(runeManagerConfig.url())
+			|| Strings.isNullOrEmpty(runeManagerConfig.username())
+			|| Strings.isNullOrEmpty(runeManagerConfig.password()))
+		{
+			return false;
+		}
+
+		RequestBody formBody = new FormBody.Builder()
+			.add("name", runeManagerConfig.username())
+			.add("password", runeManagerConfig.password())
+			.build();
+
+		Request request = new Request.Builder()
+			.url(runeManagerConfig.url() + "/api/user/login")
+			.post(formBody)
+			.build();
+
+		OkHttpClient httpClient = new OkHttpClient();
+
+		try (Response response = httpClient.newCall(request).execute())
+		{
+			if (response.code() == 200)
+			{
+				Gson gson = new Gson();
+
+				JsonPrimitive authTokenObject = gson.fromJson(response.body().string(), JsonPrimitive.class);
+
+				if (Strings.isNullOrEmpty(authTokenObject.toString()))
+				{
+					authToken = null;
+
+					return false;
+
+				}
+				else
+				{
+					authToken = authTokenObject.toString().replace("\"", "");
+
+					System.out.println("Successfully logged in");
+					return true;
+				}
+			}
+			else
+			{
+				authToken = null;
+
+				return false;
+			}
+		}
+		catch (IOException e)
+		{
+			e.printStackTrace();
+		}
+
+		authToken = null;
+
+		return false;
+	}
+
+	public void logOut()
+	{
+		authToken = null;
+	}
+
+	public String getAuthToken()
+	{
+		return authToken;
+	}
 
 	public AvailableCollections[] getBossOverview()
 	{
@@ -61,7 +132,7 @@ public class Controller
 
 		Request request = new Request.Builder()
 			.url(runeManagerConfig.url() + "/api/account/" + player + "/loot/" + collectionName)
-			.addHeader("Authorization", "Bearer " + userController.authToken)
+			.addHeader("Authorization", "Bearer " + authToken)
 			.put(RequestBody.create(MEDIA_TYPE_MARKDOWN, collectionJson))
 			.build();
 
@@ -90,7 +161,7 @@ public class Controller
 
 		Request request = new Request.Builder()
 			.url(runeManagerConfig.url() + "/api/account/" + player + "/collection/" + collectionName)
-			.addHeader("Authorization", "Bearer " + userController.authToken)
+			.addHeader("Authorization", "Bearer " + authToken)
 			.post(RequestBody.create(MEDIA_TYPE_MARKDOWN, collectionJson))
 			.build();
 
@@ -121,7 +192,7 @@ public class Controller
 
 		Request request = new Request.Builder()
 			.url(runeManagerConfig.url() + "/api/account/" + player + "/skill/" + levelUpData.get("name"))
-			.addHeader("Authorization", "Bearer " + userController.authToken)
+			.addHeader("Authorization", "Bearer " + authToken)
 			.post(formBody)
 			.build();
 
