@@ -64,7 +64,7 @@ public class RuneManagerPlugin extends Plugin
 	@Inject
 	private WorldService worldService;
 
-	private boolean onLeagueWorld;
+	private boolean onNormalWorld;
 	private boolean loggedIn = false;
 	private static final String AUTH_COMMAND_STRING = "!auth";
 	private AvailableCollections[] collections = null;
@@ -168,11 +168,11 @@ public class RuneManagerPlugin extends Plugin
 	{
 		if (gameStateChanged.getGameState() == GameState.LOGGED_IN)
 		{
-			onLeagueWorld = isLeagueWorld(client.getWorld());
+			onNormalWorld = isNormalWorld(client.getWorld());
 		}
 	}
 
-	private boolean isLeagueWorld(int worldNumber)
+	private boolean isNormalWorld(int worldNumber)
 	{
 		WorldResult worlds = worldService.getWorlds();
 		if (worlds == null)
@@ -181,7 +181,38 @@ public class RuneManagerPlugin extends Plugin
 		}
 
 		World world = worlds.findWorld(worldNumber);
-		return world != null && world.getTypes().contains(WorldType.LEAGUE);
+
+		if (world != null)
+		{
+			if (world.getTypes().contains(WorldType.DEADMAN))
+			{
+				return false;
+			}
+			else if (world.getTypes().contains(WorldType.DEADMAN_TOURNAMENT))
+			{
+				return false;
+			}
+			else if (world.getTypes().contains(WorldType.LAST_MAN_STANDING))
+			{
+				return false;
+			}
+			else if (world.getTypes().contains(WorldType.LEAGUE))
+			{
+				return false;
+			}
+			else if (world.getTypes().contains(WorldType.TOURNAMENT))
+			{
+				return false;
+			}
+			else
+			{
+				return true;
+			}
+		}
+		else
+		{
+			return false;
+		}
 	}
 
 	/**
@@ -199,7 +230,7 @@ public class RuneManagerPlugin extends Plugin
 			return;
 		}
 
-		if (onLeagueWorld)
+		if (!onNormalWorld)
 		{
 			sendChatMessage("You have to be logged in to a normal world to submit to RuneManager");
 
@@ -299,7 +330,7 @@ public class RuneManagerPlugin extends Plugin
 	@Subscribe
 	private void onWidgetLoaded(WidgetLoaded event)
 	{
-		if (loggedIn)
+		if (loggedIn && onNormalWorld)
 		{
 			int groupId = event.getGroupId();
 
@@ -324,7 +355,7 @@ public class RuneManagerPlugin extends Plugin
 	@Subscribe
 	private void onGameTick(GameTick event) throws IOException
 	{
-		if (!levelUp)
+		if (!levelUp || !onNormalWorld)
 		{
 			return;
 		}
