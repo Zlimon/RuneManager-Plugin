@@ -7,8 +7,9 @@ import lombok.Getter;
 @AllArgsConstructor
 @Getter
 @EqualsAndHashCode
-public class LootItem {
-    private int id;
-    private String name;
-    private int quantity;
+public class LootItem
+{
+	private int id;
+	private String name;
+	private int quantity;
 }
