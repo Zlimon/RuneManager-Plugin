@@ -252,7 +252,7 @@ public class RuneManagerPlugin extends Plugin
 			loot.put(itemName, itemQuantity);
 		}
 
-		sendChatMessage(controller.postLootStack(client.getLocalPlayer().getName(), collectionName, loot, userController.authToken));
+		sendChatMessage(controller.postLootStack(client.getLocalPlayer().getName(), collectionName, loot));
 	}
 
 	private LootItem[] buildEntries(final Collection<ItemStack> itemStacks)
@@ -341,18 +341,14 @@ public class RuneManagerPlugin extends Plugin
 		// If level up, parse level up data from level up widget
 		if (client.getWidget(WidgetInfo.LEVEL_UP_LEVEL) != null)
 		{
-			System.out.println("test");
 			levelUpData = parseLevelUpWidget(WidgetInfo.LEVEL_UP_LEVEL);
-			//controller.postLevelUp(client.getLocalPlayer().getName(), skill, userController.authToken);
 		}
 
 		// Submit level up data
 		if (!levelUpData.isEmpty())
 		{
-			System.out.println(levelUpData.get("level"));
-			sendChatMessage(controller.postLevelUp(client.getLocalPlayer().getName(), levelUpData, userController.authToken));
+			sendChatMessage(controller.postLevelUp(client.getLocalPlayer().getName(), levelUpData));
 		}
-		//controller.postLevelUp(levelUpData, client.getLocalPlayer().getName(), userController.authToken);
 	}
 
 	private HashMap<String, String> parseLevelUpWidget(WidgetInfo levelUpLevel)
@@ -480,7 +476,7 @@ public class RuneManagerPlugin extends Plugin
 			items.put(itemName, itemQuantity);
 		}
 
-		sendChatMessage(controller.postCollectionLog(client.getLocalPlayer().getName(), collectionName, items, userController.authToken));
+		sendChatMessage(controller.postCollectionLog(client.getLocalPlayer().getName(), collectionName, items));
 	}
 
 	private void sendChatMessage(String chatMessage)

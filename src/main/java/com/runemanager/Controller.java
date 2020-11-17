@@ -13,10 +13,10 @@ import java.util.LinkedHashMap;
 public class Controller
 {
 	@Inject
-	private Client client;
+	private RuneManagerConfig runeManagerConfig;
 
 	@Inject
-	private RuneManagerConfig runeManagerConfig;
+	private UserController userController;
 
 	private final OkHttpClient httpClient = new OkHttpClient();
 	private final Gson gson = new Gson();
@@ -55,13 +55,13 @@ public class Controller
 		return null;
 	}
 
-	public String postLootStack(String player, String collectionName, LinkedHashMap<String, Integer> loot, String authToken)
+	public String postLootStack(String player, String collectionName, LinkedHashMap<String, Integer> loot)
 	{
 		String collectionJson = gson.toJson(loot);
 
 		Request request = new Request.Builder()
 			.url(runeManagerConfig.url() + "/api/account/" + player + "/loot/" + collectionName)
-			.addHeader("Authorization", "Bearer " + authToken)
+			.addHeader("Authorization", "Bearer " + userController.authToken)
 			.put(RequestBody.create(MEDIA_TYPE_MARKDOWN, collectionJson))
 			.build();
 
@@ -84,13 +84,13 @@ public class Controller
 		return "Something went wrong";
 	}
 
-	public String postCollectionLog(String player, String collectionName, LinkedHashMap<String, Integer> loot, String authToken)
+	public String postCollectionLog(String player, String collectionName, LinkedHashMap<String, Integer> loot)
 	{
 		String collectionJson = gson.toJson(loot);
 
 		Request request = new Request.Builder()
 			.url(runeManagerConfig.url() + "/api/account/" + player + "/collection/" + collectionName)
-			.addHeader("Authorization", "Bearer " + authToken)
+			.addHeader("Authorization", "Bearer " + userController.authToken)
 			.post(RequestBody.create(MEDIA_TYPE_MARKDOWN, collectionJson))
 			.build();
 
@@ -113,7 +113,7 @@ public class Controller
 		return "Something went wrong";
 	}
 
-	public String postLevelUp(String player, HashMap<String, String> levelUpData, String authToken)
+	public String postLevelUp(String player, HashMap<String, String> levelUpData)
 	{
 		RequestBody formBody = new FormBody.Builder()
 			.add("level", levelUpData.get("level"))
@@ -121,8 +121,7 @@ public class Controller
 
 		Request request = new Request.Builder()
 			.url(runeManagerConfig.url() + "/api/account/" + player + "/skill/" + levelUpData.get("name"))
-			.addHeader("Authorization", "Bearer " + authToken)
-			.addHeader("AccountType", client.getAccountType().name().toLowerCase())
+			.addHeader("Authorization", "Bearer " + userController.authToken)
 			.post(formBody)
 			.build();
 
