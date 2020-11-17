@@ -63,7 +63,6 @@ public class Controller
 				{
 					authToken = authTokenObject.toString().replace("\"", "");
 
-					System.out.println("Successfully logged in");
 					return true;
 				}
 			}
@@ -200,7 +199,7 @@ public class Controller
 		{
 			if (response.code() == 200)
 			{
-				return "Successfully submitted level up for " + levelUpData.get("level") + " to RuneManager!";
+				return "Successfully submitted level up for " + levelUpData.get("name") + " to RuneManager!";
 			}
 			else
 			{
