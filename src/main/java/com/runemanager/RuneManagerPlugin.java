@@ -1,10 +1,15 @@
 package com.runemanager;
 
 import com.google.common.base.Strings;
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import com.google.inject.Provides;
+import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
 import net.runelite.api.events.*;
+import net.runelite.api.kit.KitType;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.chat.*;
@@ -17,6 +22,7 @@ import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.game.ItemManager;
+import net.runelite.client.util.Text;
 import net.runelite.http.api.worlds.World;
 import net.runelite.http.api.worlds.WorldResult;
 import net.runelite.http.api.worlds.WorldType;
@@ -41,13 +47,16 @@ import static net.runelite.api.widgets.WidgetID.*;
 public class RuneManagerPlugin extends Plugin
 {
 	@Inject
-	private ChatCommandManager chatCommandManager;
+	private UserController userController;
 
 	@Inject
-	private RuneManagerConfig runeManagerConfig;
+	private AccountController accountController;
 
 	@Inject
 	private Controller controller;
+
+	@Inject
+	private ChatCommandManager chatCommandManager;
 
 	@Inject
 	private Client client;
@@ -56,60 +65,71 @@ public class RuneManagerPlugin extends Plugin
 	private ClientThread clientThread;
 
 	@Inject
-	private ItemManager itemManager;
+	private ChatMessageManager chatMessageManager;
 
 	@Inject
-	private ChatMessageManager chatMessageManager;
+	private RuneManagerConfig runeManagerConfig;
 
 	@Inject
 	private WorldService worldService;
 
-	private boolean onNormalWorld;
-	private boolean loggedIn = false;
-	private static final String AUTH_COMMAND_STRING = "!auth";
+	@Inject
+	private ItemManager itemManager;
+
+
 	private AvailableCollections[] collections = null;
+	private boolean onNormalWorld = true;
 	private boolean collectionLogOpen;
-	private int previousCollectionLogValue;
 	private boolean levelUp;
 	private static final Pattern UNIQUES_OBTAINED_PATTERN = Pattern.compile("Obtained: <col=(.+?)>([0-9]+)/([0-9]+)</col>");
 	private static final Pattern KILL_COUNT_PATTERN = Pattern.compile("(.+?): <col=(.+?)>([0-9]+)</col>");
 	private static final Pattern ITEM_NAME_PATTERN = Pattern.compile("<col=(.+?)>(.+?)</col>");
 	private static final Pattern LEVEL_UP_PATTERN = Pattern.compile(".*Your ([a-zA-Z]+) (?:level is|are)? now (\\d+)\\.");
+	private int previousCollectionLogValue;
+
+
+	public String userToken = "";
+	public boolean userLoggedIn = false;
+
+	public boolean ifUserLoggedIn()
+	{
+		return !userToken.isEmpty() && userLoggedIn;
+	}
+
+	public String accountUsername = "";
+	public boolean accountLoggedIn = false;
+
+	public boolean ifAccountLoggedIn()
+	{
+		return !accountUsername.isEmpty() && accountLoggedIn;
+	}
+
+	public boolean ifUserAndAccountLoggedIn()
+	{
+		return ifUserLoggedIn() && ifAccountLoggedIn();
+	}
 
 	@Override
 	protected void startUp()
 	{
-		loggedIn = controller.logIn();
+		userController.logInUser();
 
-		chatCommandManager.registerCommandAsync(AUTH_COMMAND_STRING, this::authenticatePlayer);
+		chatCommandManager.registerCommandAsync(AccountController.AUTH_COMMAND_STRING, accountController::authenticatePlayer);
 
 		if (collections == null && !Strings.isNullOrEmpty(runeManagerConfig.url()))
 		{
 			collections = controller.getBossOverview();
 		}
-
-		clientThread.invoke(() ->
-		{
-			if (client.getGameState() == GameState.LOGGED_IN)
-			{
-				if (loggedIn)
-				{
-					sendChatMessage("You are logged in to RuneManager");
-				}
-				else
-				{
-					sendChatMessage("You are NOT logged in to RuneManager");
-				}
-			}
-		});
 	}
 
 	@Override
 	protected void shutDown()
 	{
-		controller.logOut();
+		userController.logOutUser();
 
-		chatCommandManager.unregisterCommand(AUTH_COMMAND_STRING);
+		chatCommandManager.unregisterCommand(AccountController.AUTH_COMMAND_STRING);
+
+		sendChatMessage("Successfully logged out of RuneManager.");
 
 		System.out.println("Successfully logged out");
 	}
@@ -120,55 +140,17 @@ public class RuneManagerPlugin extends Plugin
 		return configManager.getConfig(RuneManagerConfig.class);
 	}
 
-	private void authenticatePlayer(ChatMessage chatMessage, String message)
-	{
-		if (!loggedIn)
-		{
-			sendChatMessage("You have to be logged in to authenticate this account with RuneManager");
-
-			return;
-		}
-
-		String authCode = message.substring(AUTH_COMMAND_STRING.length() + 1);
-		String accountType = client.getAccountType().name().toLowerCase();
-
-		RequestBody formBody = new FormBody.Builder()
-			.add("username", client.getLocalPlayer().getName())
-			.add("code", authCode)
-			.add("account_type", accountType)
-			.build();
-
-		Request request = new Request.Builder()
-			.url(runeManagerConfig.url() + "/api/authenticate")
-			.addHeader("Authorization", "Bearer " + controller.getAuthToken())
-			.post(formBody)
-			.build();
-
-		sendChatMessage("Attempting to authenticate account " + client.getLocalPlayer().getName() + " with user " + runeManagerConfig.username() + " to RuneManager");
-
-		OkHttpClient httpClient = new OkHttpClient();
-
-		try (Response response = httpClient.newCall(request).execute())
-		{
-			if (!response.isSuccessful())
-			{
-				throw new IOException("Unexpected code " + response);
-			}
-
-			sendChatMessage(response.body().string());
-		}
-		catch (IOException e)
-		{
-			e.printStackTrace();
-		}
-	}
-
 	@Subscribe
 	private void onGameStateChanged(GameStateChanged gameStateChanged)
 	{
-		if (gameStateChanged.getGameState() == GameState.LOGGED_IN)
+//		if (gameStateChanged.getGameState() == GameState.LOGGED_IN)
+//		{
+//			onNormalWorld = isNormalWorld(client.getWorld());
+//		}
+
+		if (gameStateChanged.getGameState() == GameState.LOGIN_SCREEN)
 		{
-			onNormalWorld = isNormalWorld(client.getWorld());
+			accountController.logOutAccount();
 		}
 	}
 
@@ -223,20 +205,6 @@ public class RuneManagerPlugin extends Plugin
 	@Subscribe
 	private void onNpcLootReceived(final NpcLootReceived npcLootReceived) throws IOException
 	{
-		if (!loggedIn)
-		{
-			sendChatMessage("You have to be logged in to submit to RuneManager");
-
-			return;
-		}
-
-		if (!onNormalWorld)
-		{
-			sendChatMessage("You have to be logged in to a normal world to submit to RuneManager");
-
-			return;
-		}
-
 		final NPC npc = npcLootReceived.getNpc();
 
 		// Find if NPC is available for loot tracking
@@ -244,6 +212,20 @@ public class RuneManagerPlugin extends Plugin
 		{
 			if (availableCollections.getName().equals(npc.getName().toLowerCase()))
 			{
+				if (!ifUserAndAccountLoggedIn())
+				{
+					sendChatMessage("You have to be logged in to submit to RuneManager");
+
+					return;
+				}
+
+//				if (!onNormalWorld)
+//				{
+//					sendChatMessage("You have to be logged in to a normal world to submit to RuneManager");
+//
+//					return;
+//				}
+
 				final String name = npc.getName();
 				final Collection<ItemStack> items = npcLootReceived.getItems(); // Received items
 
@@ -253,6 +235,7 @@ public class RuneManagerPlugin extends Plugin
 			}
 		}
 	}
+
 
 	/**
 	 * Loops through loot stack and renames item names compliant with RuneManager API, and then submits loot to RuneManager
@@ -278,7 +261,7 @@ public class RuneManagerPlugin extends Plugin
 			loot.put(itemName, itemQuantity);
 		}
 
-		sendChatMessage(controller.postLootStack(client.getLocalPlayer().getName(), collectionName, loot));
+		sendChatMessage(controller.postLootStack(accountUsername, collectionName, loot));
 	}
 
 	private LootItem[] buildEntries(final Collection<ItemStack> itemStacks)
@@ -330,7 +313,11 @@ public class RuneManagerPlugin extends Plugin
 	@Subscribe
 	private void onWidgetLoaded(WidgetLoaded event)
 	{
-		if (loggedIn && onNormalWorld)
+		if (ifUserAndAccountLoggedIn() && event.getGroupId() == 84) {
+			getCurrentEquipment();
+		}
+
+		if (ifUserAndAccountLoggedIn() && onNormalWorld)
 		{
 			int groupId = event.getGroupId();
 
@@ -355,7 +342,42 @@ public class RuneManagerPlugin extends Plugin
 	@Subscribe
 	private void onGameTick(GameTick event) throws IOException
 	{
-		if (!levelUp || !onNormalWorld)
+		if (accountUsername.isEmpty())
+		{
+			accountUsername = client.getLocalPlayer().getName();
+
+			accountController.logInAccount();
+
+			if (accountLoggedIn)
+			{
+				sendChatMessage("You are now using RuneManager with " + accountUsername);
+			}
+			else
+			{
+				sendChatMessage("Could not verify this account to your RuneManager user");
+			}
+		}
+		else if (!accountUsername.equals(client.getLocalPlayer().getName()))
+		{
+			sendChatMessage("Detected another account! Relogging this account to RuneManager...");
+
+			accountController.logOutAccount();
+
+			accountUsername = client.getLocalPlayer().getName();
+
+			accountController.logInAccount();
+
+			if (accountLoggedIn)
+			{
+				sendChatMessage("You are now using RuneManager with " + accountUsername);
+			}
+			else
+			{
+				sendChatMessage("Could not verify this account to your RuneManager user");
+			}
+		}
+
+		if (!ifUserAndAccountLoggedIn() || !levelUp || !onNormalWorld)
 		{
 			return;
 		}
@@ -373,7 +395,7 @@ public class RuneManagerPlugin extends Plugin
 		// Submit level up data
 		if (!levelUpData.isEmpty())
 		{
-			sendChatMessage(controller.postLevelUp(client.getLocalPlayer().getName(), levelUpData));
+			sendChatMessage(controller.postLevelUp(accountUsername, levelUpData));
 		}
 	}
 
@@ -404,7 +426,7 @@ public class RuneManagerPlugin extends Plugin
 	@Subscribe
 	private void onVarbitChanged(VarbitChanged event)
 	{
-		if (!collectionLogOpen)
+		if (!ifUserAndAccountLoggedIn() || !collectionLogOpen)
 		{
 			return;
 		}
@@ -502,20 +524,137 @@ public class RuneManagerPlugin extends Plugin
 			items.put(itemName, itemQuantity);
 		}
 
-		sendChatMessage(controller.postCollectionLog(client.getLocalPlayer().getName(), collectionName, items));
+		sendChatMessage(controller.postCollectionLog(accountUsername, collectionName, items));
 	}
 
-	private void sendChatMessage(String chatMessage)
-	{
-		final String message = new ChatMessageBuilder()
-			.append(ChatColorType.HIGHLIGHT)
-			.append(chatMessage)
-			.build();
+	private void getCurrentEquipment() {
+		clientThread.invokeLater(() ->
+		{
+			final Widget head = client.getWidget(84, 10);
+			final Widget[] headData = head.getDynamicChildren();
+			final Widget cape = client.getWidget(84, 11);
+			final Widget[] capeData = cape.getDynamicChildren();
+			final Widget amulet = client.getWidget(84, 12);
+			final Widget[] amuletData = amulet.getDynamicChildren();
+			final Widget weapon = client.getWidget(84, 13);
+			final Widget[] weaponData = weapon.getDynamicChildren();
+			final Widget platebody = client.getWidget(84, 14);
+			final Widget[] platebodyData = platebody.getDynamicChildren();
+			final Widget shield = client.getWidget(84, 15);
+			final Widget[] shieldData = shield.getDynamicChildren();
+			final Widget platelegs = client.getWidget(84, 16);
+			final Widget[] platelegsData = platelegs.getDynamicChildren();
+			final Widget gloves = client.getWidget(84, 17);
+			final Widget[] glovesData = gloves.getDynamicChildren();
+			final Widget footwear = client.getWidget(84, 18);
+			final Widget[] footwearData = footwear.getDynamicChildren();
+			final Widget ring = client.getWidget(84, 19);
+			final Widget[] ringData = ring.getDynamicChildren();
+			final Widget ammunition = client.getWidget(84, 20);
+			final Widget[] ammunitionData = ammunition.getDynamicChildren(); // 1 - ItemId & ItemQuantity
 
-		chatMessageManager.queue(
-			QueuedMessage.builder()
-				.type(ChatMessageType.CONSOLE)
-				.runeLiteFormattedMessage(message)
-				.build());
+			JsonArray equipment = new JsonArray();
+
+			JsonObject headObject = new JsonObject();
+			headObject.addProperty("id", Integer.toString(headData[1].getItemId()));
+			headObject.addProperty("name", head.getName());
+			headObject.addProperty("quantity", Integer.toString(headData[1].getItemQuantity()));
+
+			equipment.add(headObject);
+
+			JsonObject capeObject = new JsonObject();
+			capeObject.addProperty("id", Integer.toString(capeData[1].getItemId()));
+			capeObject.addProperty("name", cape.getName());
+			capeObject.addProperty("quantity", Integer.toString(capeData[1].getItemQuantity()));
+
+			equipment.add(capeObject);
+
+			JsonObject amuletObject = new JsonObject();
+			amuletObject.addProperty("id", Integer.toString(amuletData[1].getItemId()));
+			amuletObject.addProperty("name", amulet.getName());
+			amuletObject.addProperty("quantity", Integer.toString(amuletData[1].getItemQuantity()));
+
+			equipment.add(amuletObject);
+
+			JsonObject weaponObject = new JsonObject();
+			weaponObject.addProperty("id", Integer.toString(weaponData[1].getItemId()));
+			weaponObject.addProperty("name", weapon.getName());
+			weaponObject.addProperty("quantity", Integer.toString(weaponData[1].getItemQuantity()));
+
+			equipment.add(weaponObject);
+
+			JsonObject platebodyObject = new JsonObject();
+			platebodyObject.addProperty("id", Integer.toString(platebodyData[1].getItemId()));
+			platebodyObject.addProperty("name", platebody.getName());
+			platebodyObject.addProperty("quantity", Integer.toString(platebodyData[1].getItemQuantity()));
+
+			equipment.add(platebodyObject);
+
+			JsonObject shieldObject = new JsonObject();
+			shieldObject.addProperty("id", Integer.toString(shieldData[1].getItemId()));
+			shieldObject.addProperty("name", shield.getName());
+			shieldObject.addProperty("quantity", Integer.toString(shieldData[1].getItemQuantity()));
+
+			equipment.add(shieldObject);
+
+			JsonObject platelegsObject = new JsonObject();
+			platelegsObject.addProperty("id", Integer.toString(platelegsData[1].getItemId()));
+			platelegsObject.addProperty("name", platelegs.getName());
+			platelegsObject.addProperty("quantity", Integer.toString(platelegsData[1].getItemQuantity()));
+
+			equipment.add(platelegsObject);
+
+			JsonObject glovesObject = new JsonObject();
+			glovesObject.addProperty("id", Integer.toString(glovesData[1].getItemId()));
+			glovesObject.addProperty("name", gloves.getName());
+			glovesObject.addProperty("quantity", Integer.toString(glovesData[1].getItemQuantity()));
+
+			equipment.add(glovesObject);
+
+			JsonObject footwearObject = new JsonObject();
+			footwearObject.addProperty("id", Integer.toString(footwearData[1].getItemId()));
+			footwearObject.addProperty("name", footwear.getName());
+			footwearObject.addProperty("quantity", Integer.toString(footwearData[1].getItemQuantity()));
+
+			equipment.add(footwearObject);
+
+			JsonObject ringObject = new JsonObject();
+			ringObject.addProperty("id", Integer.toString(ringData[1].getItemId()));
+			ringObject.addProperty("name", ring.getName());
+			ringObject.addProperty("quantity", Integer.toString(ringData[1].getItemQuantity()));
+
+			equipment.add(ringObject);
+
+			JsonObject ammunitionObject = new JsonObject();
+			ammunitionObject.addProperty("id", Integer.toString(ammunitionData[1].getItemId()));
+			ammunitionObject.addProperty("name", ammunition.getName());
+			ammunitionObject.addProperty("quantity", Integer.toString(ammunitionData[1].getItemQuantity()));
+
+			equipment.add(ammunitionObject);
+
+			System.out.println(equipment.toString());
+
+			sendChatMessage(controller.postEquipment(accountUsername, equipment));
+		});
+	}
+
+	public void sendChatMessage(String chatMessage)
+	{
+		clientThread.invoke(() ->
+		{
+			if (client.getGameState() == GameState.LOGGED_IN)
+			{
+				final String message = new ChatMessageBuilder()
+					.append(ChatColorType.HIGHLIGHT)
+					.append(chatMessage)
+					.build();
+
+				chatMessageManager.queue(
+					QueuedMessage.builder()
+						.type(ChatMessageType.CONSOLE)
+						.runeLiteFormattedMessage(message)
+						.build());
+			}
+		});
 	}
 }
