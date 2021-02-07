@@ -1,15 +1,12 @@
 package com.runemanager;
 
 import com.google.common.base.Strings;
-import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.inject.Provides;
-import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
 import net.runelite.api.events.*;
-import net.runelite.api.kit.KitType;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.chat.*;
@@ -22,12 +19,9 @@ import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.game.ItemManager;
-import net.runelite.client.util.Text;
 import net.runelite.http.api.worlds.World;
 import net.runelite.http.api.worlds.WorldResult;
 import net.runelite.http.api.worlds.WorldType;
-
-import okhttp3.*;
 
 import javax.inject.Inject;
 
@@ -83,6 +77,7 @@ public class RuneManagerPlugin extends Plugin
 	private boolean levelUp;
 	private boolean wintertodtLootWidget;
 	private boolean bankOpen;
+	private boolean questLogOpen;
 	private static final Pattern UNIQUES_OBTAINED_PATTERN = Pattern.compile("Obtained: <col=(.+?)>([0-9]+)/([0-9]+)</col>");
 	private static final Pattern KILL_COUNT_PATTERN = Pattern.compile("(.+?): <col=(.+?)>([0-9]+)</col>");
 	private static final Pattern ITEM_NAME_PATTERN = Pattern.compile("<col=(.+?)>(.+?)</col>");
@@ -348,6 +343,11 @@ public class RuneManagerPlugin extends Plugin
 					bankOpen = true;
 					return;
 				}
+				case QUESTLIST_GROUP_ID:
+				{
+					questLogOpen = true;
+					return;
+				}
 				default:
 					return;
 			}
@@ -450,6 +450,13 @@ public class RuneManagerPlugin extends Plugin
 			sendChatMessage(controller.postBank(accountUsername, newBank));
 
 			oldBank = newBank;
+		}
+
+		if (questLogOpen)
+		{
+			questLogOpen = false;
+
+			getQuestJournal();
 		}
 	}
 
@@ -769,6 +776,68 @@ public class RuneManagerPlugin extends Plugin
 				}
 			}
 		}
+	}
+
+	private void getQuestJournal() {
+		final Widget allQuests = client.getWidget(QUESTLIST_GROUP_ID, 5); // Right widget loot panel
+		if (allQuests == null)
+		{
+			return;
+		}
+
+		final Widget[] allQuestsChildren = allQuests.getStaticChildren();
+		if (allQuestsChildren == null)
+		{
+			return;
+		}
+
+		JsonArray questCategory = new JsonArray();
+
+		for (Widget questChild : allQuestsChildren)
+		{
+			final Widget questWidget = client.getWidget(questChild.getId()); // Right widget loot panel
+			if (questWidget == null)
+			{
+				return;
+			}
+
+			final Widget[] questChildChildren = questWidget.getDynamicChildren();
+			if (questChildChildren == null)
+			{
+				return;
+			}
+
+			JsonArray quests = new JsonArray();
+
+			for (Widget quest : questChildChildren)
+			{
+				JsonObject questObject = new JsonObject();
+				questObject.addProperty("quest", quest.getText());
+
+				Integer statusCode = quest.getTextColor();
+
+				String status = "";
+
+				if (statusCode.equals(901389))
+				{
+					status = "completed";
+				} else if (statusCode.equals(16776960))
+				{
+					status = "in_progress";
+				} else if (statusCode.equals(16711680))
+				{
+					status = "not_started";
+				}
+
+				questObject.addProperty("status", status);
+
+				quests.add(questObject);
+			}
+
+			questCategory.add(quests);
+		}
+
+		sendChatMessage(controller.postQuests(accountUsername, questCategory));
 	}
 
 	public void sendChatMessage(String chatMessage)

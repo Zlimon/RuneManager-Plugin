@@ -225,4 +225,31 @@ public class Controller
 
 		return "Something went wrong";
 	}
+
+	public String postQuests(String player, JsonArray quests)
+	{
+		Request request = new Request.Builder()
+			.url(runeManagerConfig.url() + "/api/account/" + player + "/quests")
+			.addHeader("Authorization", "Bearer " + plugin.userToken)
+			.post(RequestBody.create(MEDIA_TYPE_MARKDOWN, String.valueOf(quests)))
+			.build();
+
+		try (Response response = httpClient.newCall(request).execute())
+		{
+			if (response.code() == 200)
+			{
+				return "Successfully submitted quests to RuneManager!";
+			}
+			else
+			{
+				return response.body().string();
+			}
+		}
+		catch (IOException e)
+		{
+			e.printStackTrace();
+		}
+
+		return "Something went wrong";
+	}
 }
