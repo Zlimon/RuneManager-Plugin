@@ -1,10 +1,7 @@
 package com.runemanager;
 
-import com.google.common.base.Strings;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
-import com.google.gson.JsonPrimitive;
-import net.runelite.api.Client;
 import okhttp3.*;
 
 import javax.inject.Inject;
@@ -57,7 +54,7 @@ public class Controller
 		return null;
 	}
 
-	public String postLootStack(String player, String collectionName, LinkedHashMap<String, Integer> loot)
+	public String postLootStack(String player, String collectionName, LinkedHashMap<String, String> loot)
 	{
 		String collectionJson = gson.toJson(loot);
 
@@ -159,6 +156,35 @@ public class Controller
 			if (response.code() == 200)
 			{
 				return "Successfully submitted equipment to RuneManager!";
+			}
+			else
+			{
+				return response.body().string();
+			}
+		}
+		catch (IOException e)
+		{
+			e.printStackTrace();
+		}
+
+		return "Something went wrong";
+	}
+
+	public String postLootCrate(String player, LinkedHashMap<String, String> loot)
+	{
+		String collectionJson = gson.toJson(loot);
+
+		Request request = new Request.Builder()
+			.url(runeManagerConfig.url() + "/api/account/" + player + "/lootcrate")
+			.addHeader("Authorization", "Bearer " + plugin.userToken)
+			.post(RequestBody.create(MEDIA_TYPE_MARKDOWN, collectionJson))
+			.build();
+
+		try (Response response = httpClient.newCall(request).execute())
+		{
+			if (response.code() == 200)
+			{
+				return "Successfully submitted loot crate loot for  to RuneManager!";
 			}
 			else
 			{

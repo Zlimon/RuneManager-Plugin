@@ -81,10 +81,12 @@ public class RuneManagerPlugin extends Plugin
 	private boolean onNormalWorld = true;
 	private boolean collectionLogOpen;
 	private boolean levelUp;
+	private boolean wintertodtLootWidget;
 	private static final Pattern UNIQUES_OBTAINED_PATTERN = Pattern.compile("Obtained: <col=(.+?)>([0-9]+)/([0-9]+)</col>");
 	private static final Pattern KILL_COUNT_PATTERN = Pattern.compile("(.+?): <col=(.+?)>([0-9]+)</col>");
 	private static final Pattern ITEM_NAME_PATTERN = Pattern.compile("<col=(.+?)>(.+?)</col>");
 	private static final Pattern LEVEL_UP_PATTERN = Pattern.compile(".*Your ([a-zA-Z]+) (?:level is|are)? now (\\d+)\\.");
+	private static final Pattern WINTERTODT_LOOT_PATTERN = Pattern.compile("You have earned: (.+?).");
 	private int previousCollectionLogValue;
 
 
@@ -246,7 +248,7 @@ public class RuneManagerPlugin extends Plugin
 	private void createLootStack(String collectionName, final Collection<ItemStack> items) throws IOException
 	{
 		// itemName, itemQuantity
-		LinkedHashMap<String, Integer> loot = new LinkedHashMap<String, Integer>();
+		LinkedHashMap<String, String> loot = new LinkedHashMap<String, String>();
 
 		final LootItem[] entries = buildEntries(stack(items));
 
@@ -254,7 +256,7 @@ public class RuneManagerPlugin extends Plugin
 		for (LootItem item : entries)
 		{
 			String itemName = item.getName();
-			int itemQuantity = item.getQuantity();
+			String itemQuantity = Integer.toString(item.getQuantity());
 
 			itemName = itemName.replace(" ", "_").replaceAll("[+.^:,']", "").toLowerCase();
 
@@ -317,7 +319,7 @@ public class RuneManagerPlugin extends Plugin
 			getCurrentEquipment();
 		}
 
-		if (ifUserAndAccountLoggedIn() && onNormalWorld)
+		if (ifUserAndAccountLoggedIn())
 		{
 			int groupId = event.getGroupId();
 
@@ -331,6 +333,11 @@ public class RuneManagerPlugin extends Plugin
 				case LEVEL_UP_GROUP_ID:
 				{
 					levelUp = true;
+					return;
+				}
+				case 229:
+				{
+					wintertodtLootWidget = true;
 					return;
 				}
 				default:
@@ -377,25 +384,47 @@ public class RuneManagerPlugin extends Plugin
 			}
 		}
 
-		if (!ifUserAndAccountLoggedIn() || !levelUp || !onNormalWorld)
-		{
+		if (!ifUserAndAccountLoggedIn()) {
 			return;
 		}
 
-		levelUp = false;
-
-		HashMap<String, String> levelUpData = new HashMap<String, String>();
-
-		// If level up, parse level up data from level up widget
-		if (client.getWidget(WidgetInfo.LEVEL_UP_LEVEL) != null)
+		if (wintertodtLootWidget)
 		{
-			levelUpData = parseLevelUpWidget(WidgetInfo.LEVEL_UP_LEVEL);
+			wintertodtLootWidget = false;
+
+			LinkedHashMap<String, String> wintertodtLootData = new LinkedHashMap<String, String>();
+
+			final Widget wintertodtLootWidget = client.getWidget(229, 1);
+			if (wintertodtLootWidget == null)
+			{
+				return;
+			}
+
+			wintertodtLootData = parseWintertodtLootWidget(wintertodtLootWidget.getText());
+
+			if (!wintertodtLootData.isEmpty())
+			{
+				sendChatMessage(controller.postLootCrate(accountUsername, wintertodtLootData));
+			}
 		}
 
-		// Submit level up data
-		if (!levelUpData.isEmpty())
+		if (levelUp)
 		{
-			sendChatMessage(controller.postLevelUp(accountUsername, levelUpData));
+			levelUp = false;
+
+			HashMap<String, String> levelUpData = new HashMap<String, String>();
+
+			// If level up, parse level up data from level up widget
+			if (client.getWidget(WidgetInfo.LEVEL_UP_LEVEL) != null)
+			{
+				levelUpData = parseLevelUpWidget(WidgetInfo.LEVEL_UP_LEVEL);
+			}
+
+			// Submit level up data
+			if (!levelUpData.isEmpty())
+			{
+				sendChatMessage(controller.postLevelUp(accountUsername, levelUpData));
+			}
 		}
 	}
 
@@ -415,12 +444,50 @@ public class RuneManagerPlugin extends Plugin
 
 		HashMap<String, String> levelUpData = new HashMap<String, String>();
 
-		System.out.println(m.group(1).toLowerCase());
-
 		levelUpData.put("name", m.group(1).toLowerCase());
 		levelUpData.put("level", m.group(2));
 		//levelUpData.put("xp", "123");
 		return levelUpData;
+	}
+
+	private LinkedHashMap<String, String> parseWintertodtLootWidget(String wintertodtLoot)
+	{
+		Matcher m = WINTERTODT_LOOT_PATTERN.matcher(wintertodtLoot);
+		if (!m.matches())
+		{
+			return null;
+		}
+
+		String[] items = m.group(1).replace("<br>", " ").split(", ");
+
+		LinkedHashMap<String, String> wintertodtLootData = new LinkedHashMap<>();
+
+		wintertodtLootData.put("icon_id", "20703");
+		wintertodtLootData.put("crate_type", "Wintertodt supply crate");
+		wintertodtLootData.put("total_value", "0");
+
+		boolean unique = false;
+
+		String[] uniques = new String[]{"tome_of_fire_(empty)", "burnt_page", "pyromancer_garb", "pyromancer_hood", "pyromancer_robe", "pyromancer_boots", "warm_gloves", "bruma_torch", "dragon_axe"};
+		List<String> uniqueslist = Arrays.asList(uniques);
+
+		for (String item : items) {
+			String[] itemAndQuantity = item.split(" x ");
+
+			String itemName = itemAndQuantity[0].replaceFirst(" ", "").replace(" ", "_").replaceAll("[+.^:,']", "").toLowerCase();
+
+			if (uniqueslist.contains(itemName)) {
+				unique = true;
+			}
+
+			wintertodtLootData.put(itemName, itemAndQuantity[1]);
+		}
+
+		if (unique) {
+			controller.postLootStack(accountUsername, "wintertodt", wintertodtLootData);
+		}
+
+		return wintertodtLootData;
 	}
 
 	@Subscribe
