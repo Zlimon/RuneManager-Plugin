@@ -82,13 +82,15 @@ public class RuneManagerPlugin extends Plugin
 	private boolean collectionLogOpen;
 	private boolean levelUp;
 	private boolean wintertodtLootWidget;
+	private boolean bankOpen;
 	private static final Pattern UNIQUES_OBTAINED_PATTERN = Pattern.compile("Obtained: <col=(.+?)>([0-9]+)/([0-9]+)</col>");
 	private static final Pattern KILL_COUNT_PATTERN = Pattern.compile("(.+?): <col=(.+?)>([0-9]+)</col>");
 	private static final Pattern ITEM_NAME_PATTERN = Pattern.compile("<col=(.+?)>(.+?)</col>");
 	private static final Pattern LEVEL_UP_PATTERN = Pattern.compile(".*Your ([a-zA-Z]+) (?:level is|are)? now (\\d+)\\.");
 	private static final Pattern WINTERTODT_LOOT_PATTERN = Pattern.compile("You have earned: (.+?).");
 	private int previousCollectionLogValue;
-
+	private JsonArray oldBank = new JsonArray();
+	private JsonArray newBank = new JsonArray();
 
 	public String userToken = "";
 	public boolean userLoggedIn = false;
@@ -315,7 +317,8 @@ public class RuneManagerPlugin extends Plugin
 	@Subscribe
 	private void onWidgetLoaded(WidgetLoaded event)
 	{
-		if (ifUserAndAccountLoggedIn() && event.getGroupId() == 84) {
+		if (ifUserAndAccountLoggedIn() && event.getGroupId() == 84)
+		{
 			getCurrentEquipment();
 		}
 
@@ -338,6 +341,11 @@ public class RuneManagerPlugin extends Plugin
 				case 229:
 				{
 					wintertodtLootWidget = true;
+					return;
+				}
+				case BANK_GROUP_ID:
+				{
+					bankOpen = true;
 					return;
 				}
 				default:
@@ -384,7 +392,8 @@ public class RuneManagerPlugin extends Plugin
 			}
 		}
 
-		if (!ifUserAndAccountLoggedIn()) {
+		if (!ifUserAndAccountLoggedIn())
+		{
 			return;
 		}
 
@@ -425,6 +434,22 @@ public class RuneManagerPlugin extends Plugin
 			{
 				sendChatMessage(controller.postLevelUp(accountUsername, levelUpData));
 			}
+		}
+
+		if (bankOpen)
+		{
+			bankOpen = false;
+
+			if (oldBank == newBank)
+			{
+				newBank = new JsonArray();
+
+				return;
+			}
+
+			sendChatMessage(controller.postBank(accountUsername, newBank));
+
+			oldBank = newBank;
 		}
 	}
 
@@ -471,19 +496,22 @@ public class RuneManagerPlugin extends Plugin
 		String[] uniques = new String[]{"tome_of_fire_(empty)", "burnt_page", "pyromancer_garb", "pyromancer_hood", "pyromancer_robe", "pyromancer_boots", "warm_gloves", "bruma_torch", "dragon_axe"};
 		List<String> uniqueslist = Arrays.asList(uniques);
 
-		for (String item : items) {
+		for (String item : items)
+		{
 			String[] itemAndQuantity = item.split(" x ");
 
 			String itemName = itemAndQuantity[0].replaceFirst(" ", "").replace(" ", "_").replaceAll("[+.^:,']", "").toLowerCase();
 
-			if (uniqueslist.contains(itemName)) {
+			if (uniqueslist.contains(itemName))
+			{
 				unique = true;
 			}
 
 			wintertodtLootData.put(itemName, itemAndQuantity[1]);
 		}
 
-		if (unique) {
+		if (unique)
+		{
 			controller.postLootStack(accountUsername, "wintertodt", wintertodtLootData);
 		}
 
@@ -594,7 +622,8 @@ public class RuneManagerPlugin extends Plugin
 		sendChatMessage(controller.postCollectionLog(accountUsername, collectionName, items));
 	}
 
-	private void getCurrentEquipment() {
+	private void getCurrentEquipment()
+	{
 		clientThread.invokeLater(() ->
 		{
 			final Widget head = client.getWidget(84, 10);
@@ -699,10 +728,47 @@ public class RuneManagerPlugin extends Plugin
 
 			equipment.add(ammunitionObject);
 
-			System.out.println(equipment.toString());
-
 			sendChatMessage(controller.postEquipment(accountUsername, equipment));
 		});
+	}
+
+	@Subscribe
+	public void onScriptPostFired(ScriptPostFired event)
+	{
+		if (event.getScriptId() == ScriptID.BANKMAIN_BUILD && newBank.size() == 0)
+		{
+			// Compute bank prices using only the shown items so that we can show bank value during searches
+			final Widget bankItemContainer = client.getWidget(WidgetInfo.BANK_ITEM_CONTAINER);
+			final ItemContainer bankContainer = client.getItemContainer(InventoryID.BANK);
+			final Widget[] children = bankItemContainer.getChildren();
+
+			if (bankContainer != null && children != null)
+			{
+				log.debug("Computing bank price of {} items", bankContainer.size());
+
+				// The first components are the bank items, followed by tabs etc. There are always 816 components regardless
+				// of bank size, but we only need to check up to the bank size.
+				for (int i = 0; i < bankContainer.size(); ++i)
+				{
+					Widget child = children[i];
+					if (child != null && !child.isSelfHidden() && child.getItemId() > -1)
+					{
+						JsonObject itemObject = new JsonObject();
+						itemObject.addProperty("id", child.getItemId());
+						itemObject.addProperty("quantity", child.getItemQuantity());
+
+						Matcher itemNameMatcher = ITEM_NAME_PATTERN.matcher(child.getName());
+						if (itemNameMatcher.find())
+						{
+							itemObject.addProperty("name", itemNameMatcher.group(2));
+						}
+
+						oldBank.add(itemObject);
+						newBank.add(itemObject);
+					}
+				}
+			}
+		}
 	}
 
 	public void sendChatMessage(String chatMessage)
