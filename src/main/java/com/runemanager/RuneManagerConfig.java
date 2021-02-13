@@ -31,4 +31,46 @@ public interface RuneManagerConfig extends Config
 			position = 2
 	)
 	default String password() { return ""; };
+
+
+
+
+
+
+	@ConfigItem(
+		keyName = "saveLoot",
+		name = "Submit loot tracker data",
+		description = "Submit loot tracker data"
+	)
+	default boolean saveLoot()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "ignoredEvents",
+		name = "",
+		description = ""
+	)
+	void setIgnoredEvents(String key);
+
+	@ConfigItem(
+		keyName = "npcKillChatMessage",
+		name = "Show chat message for NPC kills",
+		description = "Adds a chat message with monster name and kill value when receiving loot from an NPC kill."
+	)
+	default boolean npcKillChatMessage()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = "pvpKillChatMessage",
+		name = "Show chat message for PVP kills",
+		description = "Adds a chat message with player name and kill value when receiving loot from a player kill."
+	)
+	default boolean pvpKillChatMessage()
+	{
+		return false;
+	}
 }
