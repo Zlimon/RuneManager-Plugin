@@ -143,32 +143,32 @@ public class Controller
 //		return "Something went wrong";
 //	}
 //
-//	public String postEquipment(String player, JsonArray equipment)
-//	{
-//		Request request = new Request.Builder()
-//			.url(runeManagerConfig.url() + "/api/account/" + player + "/equipment")
-//			.addHeader("Authorization", "Bearer " + plugin.userToken)
-//			.post(RequestBody.create(MEDIA_TYPE_MARKDOWN, String.valueOf(equipment)))
-//			.build();
+	public String postEquipment(String player, JsonArray equipment)
+	{
+		Request request = new Request.Builder()
+			.url(runeManagerConfig.url() + "/api/account/" + player + "/equipment")
+			.addHeader("Authorization", "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIxIiwianRpIjoiM2NiZjdhNjUxNDUyYTVlZDBjNTRkMDUyNzdlMDllNTAxYTdiNjlmYjY1YzQ0YzhjN2M2ODg4YzFjZWRkOTM5MzlkYTFkMjNlZGEwNDkyZGYiLCJpYXQiOiIxNjEzMjUyNjk3LjcwODE5MSIsIm5iZiI6IjE2MTMyNTI2OTcuNzA4MTk1IiwiZXhwIjoiMTY0NDc4ODY5Ny41Njk3MjAiLCJzdWIiOiIxIiwic2NvcGVzIjpbXX0.kbJW_XbOy2IBUYbaNr1tBdn7bH-MqlXSSKgdNmQ1vzPxU0TXDkj7kTL-D4K3SqSj4USZQjh7lYE88BTVGet9fFjqCQEkymngGaSjlMdgqkuD-r3afrkK-IW3I4azWuCh-MgHzNEVjo2300MWfiSZghpLrMK3_wUCMgKDBRyKsRQYxmIHUTdBsXQ0ctei1efbfebApeHHOskF3JxhrI6DiSQCTv1eKBWG9MJGweRTRfUVhpQhz17QYLBeqzdg2USRZCYSb8XdM24uXucWzO9MUnqfrz6iewza8vx5iFn1RH82b2lu4OO9l1uDHR1_oGal1ggdtBaWBMzA2elpFIl2IwAI9ZX9K52ZttcAGi6obgGQNsXZlxpI9806tM-e_jI6lpPL8GJ31u6OJqxzu28rwaXd-g0m-GqU36fsbsf2xovT2-tDKYmMkM9W1fDHlim9V0JTHn75rNIMFs80geiUDnKRD54KXhGuKvr_O92ryAU-cdtL6gNno5V0GXkC783PjmmDeKfCtnOQnRrNpqc-yGdFWRgB3la8iL5GwhqKhoFk6IPbQRICK3ZJPILx7No3Il6HN9QkPGrbaPrU8ixk-D7K9vTWg2Il2Y4G7u_ZcwJ6-2ow0VX8APBHlU2x6pB0WnmaPaxCortWWEtuRCIjQTBfZfv1GrVPAQdtKBjivqc")
+			.post(RequestBody.create(MEDIA_TYPE_MARKDOWN, String.valueOf(equipment)))
+			.build();
+
+		try (Response response = httpClient.newCall(request).execute())
+		{
+			if (response.code() == 200)
+			{
+				return "Successfully submitted equipment to RuneManager!";
+			}
+			else
+			{
+				return response.body().string();
+			}
+		}
+		catch (IOException e)
+		{
+			e.printStackTrace();
+		}
 //
-//		try (Response response = httpClient.newCall(request).execute())
-//		{
-//			if (response.code() == 200)
-//			{
-//				return "Successfully submitted equipment to RuneManager!";
-//			}
-//			else
-//			{
-//				return response.body().string();
-//			}
-//		}
-//		catch (IOException e)
-//		{
-//			e.printStackTrace();
-//		}
-//
-//		return "Something went wrong";
-//	}
+		return "Something went wrong";
+	}
 //
 //	public String postLootCrate(String player, LinkedHashMap<String, String> loot)
 //	{

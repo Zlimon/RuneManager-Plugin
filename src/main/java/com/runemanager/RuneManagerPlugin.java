@@ -33,6 +33,8 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Multiset;
 import com.google.common.collect.Multisets;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import com.google.inject.Provides;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
@@ -78,7 +80,10 @@ import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.events.MenuOptionClicked;
 import net.runelite.api.events.WidgetLoaded;
+import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetID;
+import net.runelite.api.widgets.WidgetInfo;
+import net.runelite.api.widgets.WidgetItem;
 import net.runelite.client.account.AccountSession;
 import net.runelite.client.account.SessionManager;
 import net.runelite.client.callback.ClientThread;
@@ -239,6 +244,8 @@ public class RuneManagerPlugin extends Plugin
 
 	private static final Set<Character> VOWELS = ImmutableSet.of('a', 'e', 'i', 'o', 'u');
 
+	private static final Pattern ITEM_NAME_PATTERN = Pattern.compile("<col=(.+?)>(.+?)</col>");
+
 	@Inject
 	private ClientToolbar clientToolbar;
 
@@ -271,6 +278,9 @@ public class RuneManagerPlugin extends Plugin
 
 	@Inject
 	private LootManager lootManager;
+
+	@Inject
+	private Controller controller;
 
 	private NavigationButton navButton;
 	@VisibleForTesting
@@ -501,6 +511,8 @@ public class RuneManagerPlugin extends Plugin
 				setEvent(LootRecordType.EVENT, "Drift Net", client.getBoostedSkillLevel(Skill.FISHING));
 				container = client.getItemContainer(InventoryID.DRIFT_NET_FISHING_REWARD);
 				break;
+			case 84:
+				getCurrentEquipment();
 			default:
 				return;
 		}
@@ -959,6 +971,49 @@ public class RuneManagerPlugin extends Plugin
 			.append(" for ")
 			.append(QuantityFormatter.quantityToStackSize(getTotalPrice(items)))
 			.append(" loot.")
+			.build();
+
+		chatMessageManager.queue(
+			QueuedMessage.builder()
+				.type(ChatMessageType.CONSOLE)
+				.runeLiteFormattedMessage(message)
+				.build());
+	}
+
+	private void getCurrentEquipment()
+	{
+		JsonArray equipment = new JsonArray();
+
+		for (int i = 10; i < 21; i++) {
+			final Widget equipmentSlot = client.getWidget(84, i);
+			final Widget[] equipmentData = equipmentSlot.getDynamicChildren();
+
+			JsonObject equipmentObject = new JsonObject();
+			equipmentObject.addProperty("id", Integer.toString(equipmentData[1].getItemId()));
+
+			String itemName = equipmentSlot.getName();
+
+			Matcher itemNameMatcher = ITEM_NAME_PATTERN.matcher(itemName);
+			if (itemNameMatcher.find())
+			{
+				itemName = itemNameMatcher.group(2);
+			}
+
+			equipmentObject.addProperty("name", itemName);
+
+			equipmentObject.addProperty("quantity", Integer.toString(equipmentData[1].getItemQuantity()));
+
+			equipment.add(equipmentObject);
+		}
+
+		dataSubmittedChatMessage(controller.postEquipment("Jern Zlimon", equipment));
+	}
+
+	public void dataSubmittedChatMessage(String chatMessage)
+	{
+		final String message = new ChatMessageBuilder()
+			.append(ChatColorType.HIGHLIGHT)
+			.append(chatMessage)
 			.build();
 
 		chatMessageManager.queue(
