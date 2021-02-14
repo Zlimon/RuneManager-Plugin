@@ -402,7 +402,10 @@ public class RuneManagerPlugin extends Plugin
 
 		if (config.saveLoot())
 		{
-			LootRecord lootRecord = new LootRecord(name, type, metadata, toGameItems(items), Instant.now());
+			LootRecord lootRecord = new LootRecord(name, type, entries, toGameItems(items), Instant.now());
+
+			dataSubmittedChatMessage(controller.postLootStack("Jern Zlimon", name, lootRecord));
+
 			synchronized (queuedLoots)
 			{
 				queuedLoots.add(lootRecord);
@@ -896,7 +899,7 @@ public class RuneManagerPlugin extends Plugin
 
 		return new LootTrackerItem(
 			itemId,
-			itemComposition.getName(),
+			itemComposition.getName().replace(" ", "_").replaceAll("[+.^:,']", "").toLowerCase(),
 			quantity,
 			gePrice,
 			haPrice,

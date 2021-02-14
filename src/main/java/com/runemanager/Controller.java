@@ -2,6 +2,9 @@ package com.runemanager;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
+import java.util.Collection;
+import net.runelite.client.game.ItemStack;
+import net.runelite.http.api.loottracker.LootRecord;
 import okhttp3.*;
 
 import javax.inject.Inject;
@@ -54,21 +57,21 @@ public class Controller
 		return null;
 	}
 
-	public String postLootStack(String player, String collectionName, LinkedHashMap<String, String> loot)
+	public String postLootStack(String player, String name, LootRecord loot)
 	{
-		String collectionJson = gson.toJson(loot);
+		String lootJson = gson.toJson(loot);
 
 		Request request = new Request.Builder()
-			.url(runeManagerConfig.url() + "/api/account/" + player + "/loot/" + collectionName)
+			.url(runeManagerConfig.url() + "/api/account/" + player + "/loot/" + name.toLowerCase())
 			.addHeader("Authorization", "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIxIiwianRpIjoiM2NiZjdhNjUxNDUyYTVlZDBjNTRkMDUyNzdlMDllNTAxYTdiNjlmYjY1YzQ0YzhjN2M2ODg4YzFjZWRkOTM5MzlkYTFkMjNlZGEwNDkyZGYiLCJpYXQiOiIxNjEzMjUyNjk3LjcwODE5MSIsIm5iZiI6IjE2MTMyNTI2OTcuNzA4MTk1IiwiZXhwIjoiMTY0NDc4ODY5Ny41Njk3MjAiLCJzdWIiOiIxIiwic2NvcGVzIjpbXX0.kbJW_XbOy2IBUYbaNr1tBdn7bH-MqlXSSKgdNmQ1vzPxU0TXDkj7kTL-D4K3SqSj4USZQjh7lYE88BTVGet9fFjqCQEkymngGaSjlMdgqkuD-r3afrkK-IW3I4azWuCh-MgHzNEVjo2300MWfiSZghpLrMK3_wUCMgKDBRyKsRQYxmIHUTdBsXQ0ctei1efbfebApeHHOskF3JxhrI6DiSQCTv1eKBWG9MJGweRTRfUVhpQhz17QYLBeqzdg2USRZCYSb8XdM24uXucWzO9MUnqfrz6iewza8vx5iFn1RH82b2lu4OO9l1uDHR1_oGal1ggdtBaWBMzA2elpFIl2IwAI9ZX9K52ZttcAGi6obgGQNsXZlxpI9806tM-e_jI6lpPL8GJ31u6OJqxzu28rwaXd-g0m-GqU36fsbsf2xovT2-tDKYmMkM9W1fDHlim9V0JTHn75rNIMFs80geiUDnKRD54KXhGuKvr_O92ryAU-cdtL6gNno5V0GXkC783PjmmDeKfCtnOQnRrNpqc-yGdFWRgB3la8iL5GwhqKhoFk6IPbQRICK3ZJPILx7No3Il6HN9QkPGrbaPrU8ixk-D7K9vTWg2Il2Y4G7u_ZcwJ6-2ow0VX8APBHlU2x6pB0WnmaPaxCortWWEtuRCIjQTBfZfv1GrVPAQdtKBjivqc")
-			.put(RequestBody.create(MEDIA_TYPE_MARKDOWN, collectionJson))
+			.put(RequestBody.create(MEDIA_TYPE_MARKDOWN, lootJson))
 			.build();
 
 		try (Response response = httpClient.newCall(request).execute())
 		{
 			if (response.code() == 200)
 			{
-				return "Successfully submitted kill for " + collectionName + " to RuneManager!";
+				return "Successfully submitted kill for " + name + " to RuneManager!";
 			}
 			else
 			{
