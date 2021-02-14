@@ -131,15 +131,6 @@ public class RuneManagerPlugin extends Plugin
 	private static final Pattern CLUE_SCROLL_PATTERN = Pattern.compile("You have completed [0-9]+ ([a-z]+) Treasure Trails?\\.");
 	private static final int THEATRE_OF_BLOOD_REGION = 12867;
 
-	// Herbiboar loot handling
-	@VisibleForTesting
-	static final String HERBIBOAR_LOOTED_MESSAGE = "You harvest herbs from the herbiboar, whereupon it escapes.";
-	private static final String HERBIBOAR_EVENT = "Herbiboar";
-	private static final Pattern HERBIBOAR_HERB_SACK_PATTERN = Pattern.compile(".+(Grimy .+?) herb.+");
-
-	// Seed Pack loot handling
-	private static final String SEEDPACK_EVENT = "Seed pack";
-
 	// Hespori loot handling
 	private static final String HESPORI_LOOTED_MESSAGE = "You have successfully cleared this patch for new crops.";
 	private static final String HESPORI_EVENT = "Hespori";
@@ -206,35 +197,6 @@ public class RuneManagerPlugin extends Plugin
 
 	// Last man standing map regions
 	private static final Set<Integer> LAST_MAN_STANDING_REGIONS = ImmutableSet.of(13658, 13659, 13914, 13915, 13916);
-
-	private static final Pattern PICKPOCKET_REGEX = Pattern.compile("You pick (the )?(?<target>.+)'s? pocket.*");
-
-	private static final String BIRDNEST_EVENT = "Bird nest";
-	private static final Set<Integer> BIRDNEST_IDS = ImmutableSet.of(ItemID.BIRD_NEST, ItemID.BIRD_NEST_5071, ItemID.BIRD_NEST_5072, ItemID.BIRD_NEST_5073, ItemID.BIRD_NEST_5074, ItemID.BIRD_NEST_7413, ItemID.BIRD_NEST_13653, ItemID.BIRD_NEST_22798, ItemID.BIRD_NEST_22800);
-
-	// Birdhouses
-	private static final Pattern BIRDHOUSE_PATTERN = Pattern.compile("You dismantle and discard the trap, retrieving (?:(?:a|\\d{1,2}) nests?, )?10 dead birds, \\d{1,3} feathers and (\\d,?\\d{1,3}) Hunter XP\\.");
-	private static final Map<Integer, String> BIRDHOUSE_XP_TO_TYPE = new ImmutableMap.Builder<Integer, String>().
-		put(280, "Regular Bird House").
-		put(420, "Oak Bird House").
-		put(560, "Willow Bird House").
-		put(700, "Teak Bird House").
-		put(820, "Maple Bird House").
-		put(960, "Mahogany Bird House").
-		put(1020, "Yew Bird House").
-		put(1140, "Magic Bird House").
-		put(1200, "Redwood Bird House").
-		build();
-
-	/*
-	 * This map is used when a pickpocket target has a different name in the chat message than their in-game name.
-	 * Note that if the two NPCs can be found in the same place, there is a chance of race conditions
-	 * occurring when changing targets mid-pickpocket, in which case a different solution may need to be considered.
-	 */
-	private static final Multimap<String, String> PICKPOCKET_DISAMBIGUATION_MAP = ImmutableMultimap.of(
-		"H.A.M. Member", "Man",
-		"H.A.M. Member", "Woman"
-	);
 
 	private static final String CASKET_EVENT = "Casket";
 
@@ -359,7 +321,7 @@ public class RuneManagerPlugin extends Plugin
 	@Subscribe
 	public void onSessionClose(SessionClose sessionClose)
 	{
-		submitLoot();
+//		submitLoot();
 		lootTrackerClient.setUuid(null);
 	}
 
@@ -574,18 +536,6 @@ public class RuneManagerPlugin extends Plugin
 			return;
 		}
 
-		if (message.equals(HERBIBOAR_LOOTED_MESSAGE))
-		{
-			if (processHerbiboarHerbSackLoot(event.getTimestamp()))
-			{
-				return;
-			}
-
-			setEvent(LootRecordType.EVENT, HERBIBOAR_EVENT, client.getBoostedSkillLevel(Skill.HERBLORE));
-			takeInventorySnapshot();
-			return;
-		}
-
 		final int regionID = client.getLocalPlayer().getWorldLocation().getRegionID();
 		if (HESPORI_REGION == regionID && message.equals(HESPORI_LOOTED_MESSAGE))
 		{
@@ -599,26 +549,6 @@ public class RuneManagerPlugin extends Plugin
 		{
 			String keyType = hamStoreroomMatcher.group("key");
 			setEvent(LootRecordType.EVENT, String.format("H.A.M. chest (%s)", keyType));
-			takeInventorySnapshot();
-			return;
-		}
-
-		final Matcher pickpocketMatcher = PICKPOCKET_REGEX.matcher(message);
-		if (pickpocketMatcher.matches())
-		{
-			// Get the target's name as listed in the chat box
-			String pickpocketTarget = WordUtils.capitalize(pickpocketMatcher.group("target"));
-
-			// Occasional edge case where the pickpocket message doesn't list the correct name of the NPC (e.g. H.A.M. Members)
-			if (PICKPOCKET_DISAMBIGUATION_MAP.get(lastPickpocketTarget).contains(pickpocketTarget))
-			{
-				setEvent(LootRecordType.PICKPOCKET, lastPickpocketTarget);
-			}
-			else
-			{
-				setEvent(LootRecordType.PICKPOCKET, pickpocketTarget);
-			}
-
 			takeInventorySnapshot();
 			return;
 		}
@@ -657,22 +587,6 @@ public class RuneManagerPlugin extends Plugin
 			resetEvent();
 			return;
 		}
-
-		// Check if message is a birdhouse type
-		final Matcher matcher = BIRDHOUSE_PATTERN.matcher(message);
-		if (matcher.matches())
-		{
-			final int xp = Integer.parseInt(matcher.group(1));
-			final String type = BIRDHOUSE_XP_TO_TYPE.get(xp);
-			if (type == null)
-			{
-				log.debug("Unknown bird house type {}", xp);
-				return;
-			}
-
-			setEvent(LootRecordType.EVENT, type, client.getBoostedSkillLevel(Skill.HUNTER));
-			takeInventorySnapshot();
-		}
 	}
 
 	@Subscribe
@@ -687,11 +601,8 @@ public class RuneManagerPlugin extends Plugin
 		if (CHEST_EVENT_TYPES.containsValue(eventType)
 			|| SHADE_CHEST_OBJECTS.containsValue(eventType)
 			|| HALLOWED_SEPULCHRE_COFFIN_EVENT.equals(eventType)
-			|| HERBIBOAR_EVENT.equals(eventType)
 			|| HESPORI_EVENT.equals(eventType)
-			|| SEEDPACK_EVENT.equals(eventType)
 			|| CASKET_EVENT.equals(eventType)
-			|| BIRDNEST_EVENT.equals(eventType)
 			|| SPOILS_OF_WAR_EVENT.equals(eventType)
 			|| eventType.endsWith("Bird House")
 			|| eventType.startsWith("H.A.M. chest")
@@ -715,21 +626,9 @@ public class RuneManagerPlugin extends Plugin
 			lastPickpocketTarget = Text.removeTags(event.getMenuTarget());
 		}
 
-		if (event.getMenuOption().equals("Take") && event.getId() == ItemID.SEED_PACK)
-		{
-			setEvent(LootRecordType.EVENT, SEEDPACK_EVENT);
-			takeInventorySnapshot();
-		}
-
 		if (event.getMenuOption().equals("Open") && SHADE_CHEST_OBJECTS.containsKey(event.getId()))
 		{
 			setEvent(LootRecordType.EVENT, SHADE_CHEST_OBJECTS.get(event.getId()));
-			takeInventorySnapshot();
-		}
-
-		if (event.getMenuOption().equals("Search") && BIRDNEST_IDS.contains(event.getId()))
-		{
-			setEvent(LootRecordType.EVENT, BIRDNEST_EVENT, event.getId());
 			takeInventorySnapshot();
 		}
 
@@ -832,35 +731,6 @@ public class RuneManagerPlugin extends Plugin
 
 			inventorySnapshot = null;
 		}
-	}
-
-	private boolean processHerbiboarHerbSackLoot(int timestamp)
-	{
-		List<ItemStack> herbs = new ArrayList<>();
-
-		for (MessageNode messageNode : client.getMessages())
-		{
-			if (messageNode.getTimestamp() != timestamp
-				|| messageNode.getType() != ChatMessageType.SPAM)
-			{
-				continue;
-			}
-
-			Matcher matcher = HERBIBOAR_HERB_SACK_PATTERN.matcher(messageNode.getValue());
-			if (matcher.matches())
-			{
-				herbs.add(new ItemStack(itemManager.search(matcher.group(1)).get(0).getId(), 1, client.getLocalPlayer().getLocalLocation()));
-			}
-		}
-
-		if (herbs.isEmpty())
-		{
-			return false;
-		}
-
-		int herbloreLevel = client.getBoostedSkillLevel(Skill.HERBLORE);
-		addLoot(HERBIBOAR_EVENT, -1, LootRecordType.EVENT, herbloreLevel, herbs);
-		return true;
 	}
 
 	boolean isIgnored(String name)
