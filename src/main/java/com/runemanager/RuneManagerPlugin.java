@@ -28,35 +28,29 @@ package com.runemanager;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.HashMultiset;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Multimap;
 import com.google.common.collect.Multiset;
 import com.google.common.collect.Multisets;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.inject.Provides;
-import java.awt.image.BufferedImage;
-import java.io.IOException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.inject.Inject;
-import javax.swing.SwingUtilities;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NonNull;
@@ -65,25 +59,27 @@ import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.InventoryID;
+import net.runelite.api.Item;
 import net.runelite.api.ItemComposition;
 import net.runelite.api.ItemContainer;
 import net.runelite.api.ItemID;
-import net.runelite.api.MessageNode;
 import net.runelite.api.NPC;
 import net.runelite.api.ObjectID;
 import net.runelite.api.Player;
+import net.runelite.api.ScriptID;
 import net.runelite.api.Skill;
-import net.runelite.api.SpriteID;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.GameTick;
 import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.events.MenuOptionClicked;
+import net.runelite.api.events.ScriptPostFired;
+import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.events.WidgetLoaded;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetID;
 import net.runelite.api.widgets.WidgetInfo;
-import net.runelite.api.widgets.WidgetItem;
 import net.runelite.client.account.AccountSession;
 import net.runelite.client.account.SessionManager;
 import net.runelite.client.callback.ClientThread;
@@ -95,7 +91,6 @@ import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ClientShutdown;
-import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.events.NpcLootReceived;
 import net.runelite.client.events.PlayerLootReceived;
 import net.runelite.client.events.SessionClose;
@@ -103,22 +98,17 @@ import net.runelite.client.events.SessionOpen;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.game.ItemStack;
 import net.runelite.client.game.LootManager;
-import net.runelite.client.game.SpriteManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.task.Schedule;
-import net.runelite.client.ui.ClientToolbar;
-import net.runelite.client.ui.NavigationButton;
-import net.runelite.client.util.ImageUtil;
-import net.runelite.client.util.QuantityFormatter;
 import net.runelite.client.util.Text;
+import net.runelite.http.api.item.ItemPrice;
 import net.runelite.http.api.loottracker.GameItem;
 import net.runelite.http.api.loottracker.LootAggregate;
 import net.runelite.http.api.loottracker.LootRecord;
 import net.runelite.http.api.loottracker.LootRecordType;
 import net.runelite.http.api.loottracker.LootTrackerClient;
 import okhttp3.OkHttpClient;
-import org.apache.commons.text.WordUtils;
 
 @PluginDescriptor(
 	name = "1RuneManager",
@@ -188,7 +178,7 @@ public class RuneManagerPlugin extends Plugin
 //		put(ObjectID.GOLD_CHEST_41214, "Gold key crimson").
 //		put(ObjectID.GOLD_CHEST_41215, "Gold key black").
 //		put(ObjectID.GOLD_CHEST_41216, "Gold key purple").
-		build();
+	build();
 
 	// Hallow Sepulchre Coffin handling
 	private static final String COFFIN_LOOTED_MESSAGE = "You push the coffin lid aside.";
@@ -206,16 +196,30 @@ public class RuneManagerPlugin extends Plugin
 
 	private static final Set<Character> VOWELS = ImmutableSet.of('a', 'e', 'i', 'o', 'u');
 
+	private final Map<String, List<CollectionLogItem>> obtainedItems = new HashMap<>();
+
 	private static final Pattern ITEM_NAME_PATTERN = Pattern.compile("<col=(.+?)>(.+?)</col>");
 
-	@Inject
-	private ClientToolbar clientToolbar;
+	private static final int COLLECTION_LOG_GROUP_ID = 621;
+	private static final int COLLECTION_LOG_CONTAINER = 1;
+	private static final int COLLECTION_LOG_CATEGORY_HEAD = 19;
+	private static final int COLLECTION_LOG_CATEGORY_ITEMS = 35;
+	private static final int COLLECTION_LOG_DRAW_LIST_SCRIPT_ID = 2730;
+	private static final int COLLECTION_LOG_CATEGORY_VARBIT_INDEX = 2049;
+
+	private boolean wintertodtLootWidgetOpen;
+	private boolean levelUpWidgetOpen;
+	private boolean bankWidgetOpen;
+	private boolean questLogMenuOpen;
+
+	private static final Pattern WINTERTODT_LOOT_PATTERN = Pattern.compile("You have earned: (.+?).");
+	private static final Pattern LEVEL_UP_PATTERN = Pattern.compile(".*Your ([a-zA-Z]+) (?:level is|are)? now (\\d+)\\.");
+
+	private JsonArray oldBank = new JsonArray();
+	private JsonArray newBank = new JsonArray();
 
 	@Inject
 	private ItemManager itemManager;
-
-	@Inject
-	private SpriteManager spriteManager;
 
 	@Inject
 	private RuneManagerConfig config;
@@ -230,9 +234,6 @@ public class RuneManagerPlugin extends Plugin
 	private SessionManager sessionManager;
 
 	@Inject
-	private ScheduledExecutorService executor;
-
-	@Inject
 	private EventBus eventBus;
 
 	@Inject
@@ -244,17 +245,15 @@ public class RuneManagerPlugin extends Plugin
 	@Inject
 	private Controller controller;
 
-	private NavigationButton navButton;
 	@VisibleForTesting
 	String eventType;
 	@VisibleForTesting
 	LootRecordType lootRecordType;
 	private Object metadata;
 	private boolean chestLooted;
-	private String lastPickpocketTarget;
 
-	private List<String> ignoredItems = new ArrayList<>();
-	private List<String> ignoredEvents = new ArrayList<>();
+	private final List<String> ignoredItems = new ArrayList<>();
+	private final List<String> ignoredEvents = new ArrayList<>();
 
 	private Multiset<Integer> inventorySnapshot;
 
@@ -366,7 +365,7 @@ public class RuneManagerPlugin extends Plugin
 		{
 			LootRecord lootRecord = new LootRecord(name, type, entries, toGameItems(items), Instant.now());
 
-			dataSubmittedChatMessage(controller.postLootStack("Jern Zlimon", name, lootRecord));
+			dataSubmittedChatMessage(controller.postLootStack(name, lootRecord));
 
 			synchronized (queuedLoots)
 			{
@@ -386,15 +385,6 @@ public class RuneManagerPlugin extends Plugin
 		final int combat = npc.getCombatLevel();
 
 		addLoot(name, combat, LootRecordType.NPC, npc.getId(), items);
-
-		if (config.npcKillChatMessage())
-		{
-			final String prefix = VOWELS.contains(Character.toLowerCase(name.charAt(0)))
-				? "an"
-				: "a";
-
-			lootReceivedChatMessage(items, prefix + ' ' + name);
-		}
 	}
 
 	@Subscribe
@@ -412,11 +402,6 @@ public class RuneManagerPlugin extends Plugin
 		final int combat = player.getCombatLevel();
 
 		addLoot(name, combat, LootRecordType.PLAYER, null, items);
-
-		if (config.pvpKillChatMessage())
-		{
-			lootReceivedChatMessage(items, name);
-		}
 	}
 
 	@Subscribe
@@ -476,8 +461,39 @@ public class RuneManagerPlugin extends Plugin
 				setEvent(LootRecordType.EVENT, "Drift Net", client.getBoostedSkillLevel(Skill.FISHING));
 				container = client.getItemContainer(InventoryID.DRIFT_NET_FISHING_REWARD);
 				break;
+			case (COLLECTION_LOG_GROUP_ID):
+				getCategory();
+				container = null;
+				break;
 			case 84:
 				getCurrentEquipment();
+				container = null;
+				break;
+			case 229:
+			{
+				wintertodtLootWidgetOpen = true;
+				setEvent(LootRecordType.EVENT, "Wintertodt", client.getBoostedSkillLevel(Skill.FIREMAKING));
+				container = null;
+				break;
+			}
+			case (WidgetID.LEVEL_UP_GROUP_ID):
+			{
+				levelUpWidgetOpen = true;
+				container = null;
+				break;
+			}
+			case (WidgetID.BANK_GROUP_ID):
+			{
+				bankWidgetOpen = true;
+				container = null;
+				break;
+			}
+			case (WidgetID.QUESTLIST_GROUP_ID):
+			{
+				questLogMenuOpen = true;
+				container = null;
+				break;
+			}
 			default:
 				return;
 		}
@@ -619,13 +635,6 @@ public class RuneManagerPlugin extends Plugin
 	@Subscribe
 	public void onMenuOptionClicked(MenuOptionClicked event)
 	{
-		// There are some pickpocket targets who show up in the chat box with a different name (e.g. H.A.M. members -> man/woman)
-		// We use the value selected from the right-click menu as a fallback for the event lookup in those cases.
-		if (event.getMenuOption().equals("Pickpocket"))
-		{
-			lastPickpocketTarget = Text.removeTags(event.getMenuTarget());
-		}
-
 		if (event.getMenuOption().equals("Open") && SHADE_CHEST_OBJECTS.containsKey(event.getId()))
 		{
 			setEvent(LootRecordType.EVENT, SHADE_CHEST_OBJECTS.get(event.getId()));
@@ -642,6 +651,133 @@ public class RuneManagerPlugin extends Plugin
 		{
 			setEvent(LootRecordType.EVENT, SPOILS_OF_WAR_EVENT);
 			takeInventorySnapshot();
+		}
+	}
+
+	@Subscribe
+	public void onScriptPostFired(ScriptPostFired event)
+	{
+		if (event.getScriptId() == ScriptID.BANKMAIN_BUILD && newBank.size() == 0)
+		{
+			// Compute bank prices using only the shown items so that we can show bank value during searches
+			final Widget bankItemContainer = client.getWidget(WidgetInfo.BANK_ITEM_CONTAINER);
+			final ItemContainer bankContainer = client.getItemContainer(InventoryID.BANK);
+			final Widget[] children = bankItemContainer.getChildren();
+
+			if (bankContainer != null && children != null)
+			{
+				log.debug("Computing bank price of {} items", bankContainer.size());
+
+				// The first components are the bank items, followed by tabs etc. There are always 816 components regardless
+				// of bank size, but we only need to check up to the bank size.
+				for (int i = 0; i < bankContainer.size(); ++i)
+				{
+					Widget child = children[i];
+					if (child != null && !child.isSelfHidden() && child.getItemId() > -1)
+					{
+						JsonObject itemObject = new JsonObject();
+						itemObject.addProperty("id", child.getItemId());
+						itemObject.addProperty("quantity", child.getItemQuantity());
+
+						Matcher itemNameMatcher = ITEM_NAME_PATTERN.matcher(child.getName());
+						if (itemNameMatcher.find())
+						{
+							itemObject.addProperty("name", itemNameMatcher.group(2));
+						}
+
+						oldBank.add(itemObject);
+						newBank.add(itemObject);
+					}
+				}
+			}
+		}
+	}
+
+	@Subscribe
+	private void onGameTick(GameTick event)
+	{
+		if (wintertodtLootWidgetOpen)
+		{
+			wintertodtLootWidgetOpen = false;
+
+			final Widget wintertodtLootWidget = client.getWidget(229, 1);
+			if (wintertodtLootWidget == null)
+			{
+				return;
+			}
+
+			Item[] container = parseWintertodtLootWidget(wintertodtLootWidget.getText());
+			if (container == null)
+			{
+				return;
+			}
+
+			// Convert container items to array of ItemStack
+			final Collection<ItemStack> items = Arrays.stream(container)
+				.filter(item -> item.getId() > 0)
+				.map(item -> new ItemStack(item.getId(), item.getQuantity(), client.getLocalPlayer().getLocalLocation()))
+				.collect(Collectors.toList());
+
+			if (items.isEmpty())
+			{
+				log.debug("No items to find for Event: {} | Container: {}", eventType, container);
+				return;
+			}
+
+			addLoot(eventType, -1, lootRecordType, metadata, items);
+		}
+
+		if (levelUpWidgetOpen)
+		{
+			levelUpWidgetOpen = false;
+
+			HashMap<String, String> levelUpData = new HashMap<String, String>();
+
+			// If level up, parse level up data from level up widget
+			if (client.getWidget(WidgetInfo.LEVEL_UP_LEVEL) != null)
+			{
+				levelUpData = parseLevelUpWidget(WidgetInfo.LEVEL_UP_LEVEL);
+			}
+
+			if (levelUpData.isEmpty())
+			{
+				log.debug("Could not find any level up message");
+				return;
+			}
+
+			dataSubmittedChatMessage(controller.postLevelUp(levelUpData));
+		}
+
+		if (bankWidgetOpen)
+		{
+			bankWidgetOpen = false;
+
+			if (oldBank == newBank)
+			{
+				newBank = new JsonArray();
+
+				return;
+			}
+
+			dataSubmittedChatMessage(controller.postBank(newBank));
+
+			oldBank = newBank;
+		}
+
+		if (questLogMenuOpen)
+		{
+			questLogMenuOpen = false;
+
+			getQuestJournal();
+		}
+	}
+
+	@Subscribe
+	public void onVarbitChanged(VarbitChanged varbitChanged)
+	{
+		if (varbitChanged.getIndex() == COLLECTION_LOG_CATEGORY_VARBIT_INDEX)
+		{
+			clientThread.invokeLater(this::getCategory);
 		}
 	}
 
@@ -835,29 +971,149 @@ public class RuneManagerPlugin extends Plugin
 		return totalPrice;
 	}
 
-	private void lootReceivedChatMessage(final Collection<ItemStack> items, final String name)
+	private Integer getObtainedCount(Widget categoryHead)
 	{
-		final String message = new ChatMessageBuilder()
-			.append(ChatColorType.HIGHLIGHT)
-			.append("You've killed ")
-			.append(name)
-			.append(" for ")
-			.append(QuantityFormatter.quantityToStackSize(getTotalPrice(items)))
-			.append(" loot.")
-			.build();
+		Widget[] children = categoryHead.getDynamicChildren();
+		if (children.length < 3)
+		{
+			return 0;
+		}
 
-		chatMessageManager.queue(
-			QueuedMessage.builder()
-				.type(ChatMessageType.CONSOLE)
-				.runeLiteFormattedMessage(message)
-				.build());
+		Pattern UNIQUES_OBTAINED_PATTERN = Pattern.compile("Obtained: <col=(.+?)>([0-9]+)/([0-9]+)</col>");
+
+		String obtainedCount = categoryHead.getDynamicChildren()[1].getText();
+		Matcher uniquesObtainedMatcher = UNIQUES_OBTAINED_PATTERN.matcher(obtainedCount);
+		if (uniquesObtainedMatcher.find())
+		{
+			obtainedCount = uniquesObtainedMatcher.group(2);
+		}
+
+		return Integer.parseInt(obtainedCount);
+	}
+
+	private Integer getKillCount(Widget categoryHead)
+	{
+		Widget[] children = categoryHead.getDynamicChildren();
+		if (children.length < 3)
+		{
+			return 0;
+		}
+
+		String killCount = categoryHead.getDynamicChildren()[2].getText();
+		killCount = killCount.split(": ")[1]
+			.split(">")[1]
+			.split("<")[0]
+			.replace(",", "");
+
+		return Integer.parseInt(killCount);
+	}
+
+	private void getCategory()
+	{
+		Widget categoryHead = client.getWidget(COLLECTION_LOG_GROUP_ID, COLLECTION_LOG_CATEGORY_HEAD);
+		if (categoryHead == null)
+		{
+			return;
+		}
+
+		String categoryTitle = categoryHead.getDynamicChildren()[0].getText();
+
+		final Widget[] header = categoryHead.getDynamicChildren();
+		if (header == null)
+		{
+			return;
+		}
+
+		Integer obtainedCount = getObtainedCount(categoryHead);
+		Integer killCount = getKillCount(categoryHead);
+
+		getItems(categoryTitle, obtainedCount, killCount);
+	}
+
+	private void getItems(String categoryTitle, Integer obtainedCount, Integer killCount)
+	{
+		final Widget itemsContainer = client.getWidget(COLLECTION_LOG_GROUP_ID, COLLECTION_LOG_CATEGORY_ITEMS);
+		if (itemsContainer == null)
+		{
+			return;
+		}
+
+		final Widget[] items = itemsContainer.getDynamicChildren();
+		if (items == null)
+		{
+			return;
+		}
+
+		List<CollectionLogItem> collectionLogItems = new ArrayList<>();
+		for (Widget item : items)
+		{
+			collectionLogItems.add(new CollectionLogItem(item));
+		}
+
+		dataSubmittedChatMessage(controller.postCollectionLog(categoryTitle, collectionLogItems, obtainedCount, killCount));
+	}
+
+	private Item[] parseWintertodtLootWidget(String wintertodtLootString)
+	{
+		Matcher m = WINTERTODT_LOOT_PATTERN.matcher(wintertodtLootString);
+		if (!m.matches())
+		{
+			return null;
+		}
+
+		String[] lootStrings = m.group(1).replace("<br>", " ").split(", ");
+
+		final List<Item> wintertodtLootItems = new ArrayList<>();
+
+		for (String lootString : lootStrings)
+		{
+			String[] itemAndQuantity = lootString.split(" x ");
+
+			String itemName = itemAndQuantity[0].replaceFirst(" ", ""); // For some reason there is a redundant zero
+			List<ItemPrice> itemIdSearch = itemManager.search(itemName);
+
+			int itemId = 0;
+			if (itemIdSearch.size() > 0)
+			{
+				itemId = itemIdSearch.get(0).getId();
+			}
+
+			Item item = new Item(itemId, Integer.parseInt(itemAndQuantity[1]));
+
+			wintertodtLootItems.add(item);
+		}
+
+		return wintertodtLootItems.toArray(new Item[0]);
+	}
+
+	private HashMap<String, String> parseLevelUpWidget(WidgetInfo levelUpLevel)
+	{
+		Widget levelChild = client.getWidget(levelUpLevel);
+		if (levelChild == null)
+		{
+			return null;
+		}
+
+		Matcher m = LEVEL_UP_PATTERN.matcher(levelChild.getText());
+		if (!m.matches())
+		{
+			return null;
+		}
+
+		HashMap<String, String> levelUpData = new HashMap<String, String>();
+
+		levelUpData.put("name", m.group(1).toLowerCase());
+		levelUpData.put("level", m.group(2));
+
+		return levelUpData;
 	}
 
 	private void getCurrentEquipment()
 	{
 		JsonArray equipment = new JsonArray();
 
-		for (int i = 10; i < 21; i++) {
+		for (int i = 10; i < 21; i++)
+		{
 			final Widget equipmentSlot = client.getWidget(84, i);
 			final Widget[] equipmentData = equipmentSlot.getDynamicChildren();
 
@@ -879,7 +1135,72 @@ public class RuneManagerPlugin extends Plugin
 			equipment.add(equipmentObject);
 		}
 
-		dataSubmittedChatMessage(controller.postEquipment("Jern Zlimon", equipment));
+		dataSubmittedChatMessage(controller.postEquipment(equipment));
+	}
+
+	private void getQuestJournal()
+	{
+		final Widget allQuests = client.getWidget(WidgetID.QUESTLIST_GROUP_ID, 5);
+		if (allQuests == null)
+		{
+			return;
+		}
+
+		final Widget[] allQuestsChildren = allQuests.getStaticChildren();
+		if (allQuestsChildren == null)
+		{
+			return;
+		}
+
+		JsonArray questCategory = new JsonArray();
+
+		for (Widget questChild : allQuestsChildren)
+		{
+			final Widget questWidget = client.getWidget(questChild.getId());
+			if (questWidget == null)
+			{
+				return;
+			}
+
+			final Widget[] questChildChildren = questWidget.getDynamicChildren();
+			if (questChildChildren == null)
+			{
+				return;
+			}
+
+			JsonArray quests = new JsonArray();
+
+			for (Widget quest : questChildChildren)
+			{
+				JsonObject questObject = new JsonObject();
+				questObject.addProperty("quest", quest.getText());
+
+				Integer statusCode = quest.getTextColor();
+
+				String status = "";
+
+				if (statusCode.equals(901389))
+				{
+					status = "completed";
+				}
+				else if (statusCode.equals(16776960))
+				{
+					status = "in_progress";
+				}
+				else if (statusCode.equals(16711680))
+				{
+					status = "not_started";
+				}
+
+				questObject.addProperty("status", status);
+
+				quests.add(questObject);
+			}
+
+			questCategory.add(quests);
+		}
+
+		dataSubmittedChatMessage(controller.postQuests(questCategory));
 	}
 
 	public void dataSubmittedChatMessage(String chatMessage)

@@ -2,28 +2,27 @@ package com.runemanager;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
-import java.util.Collection;
-import net.runelite.client.game.ItemStack;
-import net.runelite.http.api.loottracker.LootRecord;
-import okhttp3.*;
-
-import javax.inject.Inject;
+import com.google.gson.JsonObject;
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
+import java.util.List;
+import javax.inject.Inject;
+import net.runelite.http.api.loottracker.LootRecord;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
 
 public class Controller
 {
-	@Inject
-	private RuneManagerConfig runeManagerConfig;
-
-	@Inject
-	private RuneManagerPlugin plugin;
-
-	private final OkHttpClient httpClient = new OkHttpClient();
-	private final Gson gson = new Gson();
 	private static final MediaType MEDIA_TYPE_MARKDOWN
 		= MediaType.parse("application/json; charset=utf-8");
+	private final OkHttpClient httpClient = new OkHttpClient();
+	private final Gson gson = new Gson();
+
+	@Inject
+	private RuneManagerConfig runeManagerConfig;
 
 	public AvailableCollections[] getBossOverview()
 	{
@@ -57,202 +56,144 @@ public class Controller
 		return null;
 	}
 
-	public String postLootStack(String player, String name, LootRecord loot)
+	public String postLootStack(String name, LootRecord loot)
 	{
-		String lootJson = gson.toJson(loot);
+		String player = "Jern Zlimon"; // WIP
 
+		String endPoint = "/api/account/" + player + "/loot/" + name.toLowerCase();
+
+		String lootString = gson.toJson(loot);
+
+		return sendPutRequest(endPoint, lootString);
+	}
+
+//	public String postLootCrate(String name, LinkedHashMap<String, String> loot)
+//	{
+//		String player = "Jern Zlimon"; // WIP
+//
+//		String endPoint = "/api/account/" + player + "/lootcrate";
+//
+//		String lootString = gson.toJson(loot);
+//
+//		Integer responseCode = sendPutRequest(endPoint, lootString);
+//
+//		if (responseCode == 200) {
+//			return "Successfully submitted loot crate loot for " + name + " to RuneManager!";
+//		}
+//
+//		return "Something went wrong";
+//	}
+
+	public String postCollectionLog(String categoryTitle, List<CollectionLogItem> collectionLogItems, Integer obtainedCount, Integer killCount)
+	{
+		String player = "Jern Zlimon"; // WIP
+
+		String endPoint = "/api/account/" + player + "/collection/" + categoryTitle.toLowerCase();
+
+		JsonArray collectionLogItemsJsonArray = gson.toJsonTree(collectionLogItems).getAsJsonArray();
+
+		JsonObject collectionLogJsonObject = new JsonObject();
+		collectionLogJsonObject.add("collectionLogItems", collectionLogItemsJsonArray);
+
+		collectionLogJsonObject.addProperty("obtained", Integer.toString(obtainedCount));
+		collectionLogJsonObject.addProperty("kill_count", Integer.toString(killCount));
+
+		String collectionLogString = gson.toJson(collectionLogJsonObject);
+
+		return sendPostRequest(endPoint, collectionLogString);
+	}
+
+	public String postLevelUp(HashMap<String, String> levelUpData)
+	{
+		String player = "Jern Zlimon"; // WIP
+
+		String endPoint = "/api/account/" + player + "/skill/" + levelUpData.get("name");
+
+		String levelUpString = gson.toJson(levelUpData);
+
+		return sendPostRequest(endPoint, levelUpString);
+	}
+
+	public String postEquipment(JsonArray equipment)
+	{
+		String player = "Jern Zlimon"; // WIP
+
+		String endPoint = "/api/account/" + player + "/equipment";
+
+		String equipmentString = gson.toJson(equipment);
+
+		return sendPostRequest(endPoint, equipmentString);
+	}
+
+	public String postBank(JsonArray bank)
+	{
+		String player = "Jern Zlimon"; // WIP
+
+		String endPoint = "/api/account/" + player + "/bank";
+
+		String bankString = gson.toJson(bank);
+
+		return sendPostRequest(endPoint, bankString);
+	}
+
+	public String postQuests(JsonArray quests)
+	{
+		String player = "Jern Zlimon"; // WIP
+
+		String endPoint = "/api/account/" + player + "/quests";
+
+		String postString = gson.toJson(quests);
+
+		return sendPostRequest(endPoint, postString);
+	}
+
+	public String sendPostRequest(String endPoint, String json)
+	{
 		Request request = new Request.Builder()
-			.url(runeManagerConfig.url() + "/api/account/" + player + "/loot/" + name.toLowerCase())
-			.addHeader("Authorization", "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIxIiwianRpIjoiM2NiZjdhNjUxNDUyYTVlZDBjNTRkMDUyNzdlMDllNTAxYTdiNjlmYjY1YzQ0YzhjN2M2ODg4YzFjZWRkOTM5MzlkYTFkMjNlZGEwNDkyZGYiLCJpYXQiOiIxNjEzMjUyNjk3LjcwODE5MSIsIm5iZiI6IjE2MTMyNTI2OTcuNzA4MTk1IiwiZXhwIjoiMTY0NDc4ODY5Ny41Njk3MjAiLCJzdWIiOiIxIiwic2NvcGVzIjpbXX0.kbJW_XbOy2IBUYbaNr1tBdn7bH-MqlXSSKgdNmQ1vzPxU0TXDkj7kTL-D4K3SqSj4USZQjh7lYE88BTVGet9fFjqCQEkymngGaSjlMdgqkuD-r3afrkK-IW3I4azWuCh-MgHzNEVjo2300MWfiSZghpLrMK3_wUCMgKDBRyKsRQYxmIHUTdBsXQ0ctei1efbfebApeHHOskF3JxhrI6DiSQCTv1eKBWG9MJGweRTRfUVhpQhz17QYLBeqzdg2USRZCYSb8XdM24uXucWzO9MUnqfrz6iewza8vx5iFn1RH82b2lu4OO9l1uDHR1_oGal1ggdtBaWBMzA2elpFIl2IwAI9ZX9K52ZttcAGi6obgGQNsXZlxpI9806tM-e_jI6lpPL8GJ31u6OJqxzu28rwaXd-g0m-GqU36fsbsf2xovT2-tDKYmMkM9W1fDHlim9V0JTHn75rNIMFs80geiUDnKRD54KXhGuKvr_O92ryAU-cdtL6gNno5V0GXkC783PjmmDeKfCtnOQnRrNpqc-yGdFWRgB3la8iL5GwhqKhoFk6IPbQRICK3ZJPILx7No3Il6HN9QkPGrbaPrU8ixk-D7K9vTWg2Il2Y4G7u_ZcwJ6-2ow0VX8APBHlU2x6pB0WnmaPaxCortWWEtuRCIjQTBfZfv1GrVPAQdtKBjivqc")
-			.put(RequestBody.create(MEDIA_TYPE_MARKDOWN, lootJson))
+			.url(runeManagerConfig.url() + endPoint)
+			.addHeader("Authorization", "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIxIiwianRpIjoiMWZiZDAxNjBiNDY0ZDYwM2U4YWZhOGNlYmNjODM3YzUzMmExOTU5NDU5Njg4MzZhN2QxNmIzODE5MGVlMDIxNzNhMTNjOTYyYzViZTMxYzIiLCJpYXQiOiIxNjEzNjgxNTM0Ljk0MDMzNiIsIm5iZiI6IjE2MTM2ODE1MzQuOTQwMzM5IiwiZXhwIjoiMTY0NTIxNzUzNC44Nzk4NDMiLCJzdWIiOiIxIiwic2NvcGVzIjpbXX0.A2oJPTB9AsQrSKK8UZqToEeGoRyFx5-F0zAzJWj9-Hb3cD_ooIrYPT4SIp9Q1lmmYTlsxA4FjrJnWW7WqO8HoRyjoD7oiSPUKsINOn80pDKebdE2TJR8zl4giNaRN7tCozbAqKkvJ0V4FwCDdPyUZRFpBCI9lQQT1Zhcy_Ts_k2Y1Cgu9AOp2F20LXmgEM1pKGF0D_PeSaQoyP0npzJnCqUIdwmLAKGYSXRaTTXRAmnMed21QNGKS3QdD2FKngRWsXF0k4mey9CJKKK_Kd1djP0421eDD4VX-SHDJLTWj0VUhH_MMatPJij0MEU5UqyWW-k5mJmKkaO7z9z-8LwHeZV_gUJgHXAQqnaVBJNN3pw1DwffDU3GkQFGLImDh-AZKK2o-LpLKIe85g6mWTi8K7Dq0WbzjJhIg2xzLWbYbKkcVsh4pi7yRj-oJ-_l36O-BVAMrHk4uR4zq702IHC5Uz7iFsS1Y3WxJUf-iai283JfoSaapRnj2D0qP7QLZeiWjE1WbqB6PFosWrSMur2qFQYF4U7aullR9dCqGCWc6of6eCkh_7mapB8lfPTnzbWtM_PExQu3mmkmFIK2MnWeFxIOvodgGWe_D78KqpJBnhQM_8ZdjvMyW2jyMuztyBKiZIIOfzP2eDjQnf96gGZEKBk7f1MF-u0J3tGUFKCp8OQ")
+			.post(RequestBody.create(MEDIA_TYPE_MARKDOWN, json))
 			.build();
 
 		try (Response response = httpClient.newCall(request).execute())
 		{
-			if (response.code() == 200)
-			{
-				return "Successfully submitted kill for " + name + " to RuneManager!";
-			}
-			else
+			if (response.code() == 200 || response.code() == 201)
 			{
 				return response.body().string();
 			}
+
+			return "Error: " + response.code() + " - " + response.body().string();
 		}
 		catch (IOException e)
 		{
 			e.printStackTrace();
 		}
 
-		return "Something went wrong";
+		return "Something went wrong!";
 	}
 
-//	public String postCollectionLog(String player, String collectionName, LinkedHashMap<String, Integer> loot)
-//	{
-//		String collectionJson = gson.toJson(loot);
-//
-//		Request request = new Request.Builder()
-//			.url(runeManagerConfig.url() + "/api/account/" + player + "/collection/" + collectionName)
-//			.addHeader("Authorization", "Bearer " + plugin.userToken)
-//			.post(RequestBody.create(MEDIA_TYPE_MARKDOWN, collectionJson))
-//			.build();
-//
-//		try (Response response = httpClient.newCall(request).execute())
-//		{
-//			if (response.code() == 200)
-//			{
-//				return "Successfully submitted collection log for " + collectionName + " to RuneManager!";
-//			}
-//			else
-//			{
-//				return response.body().string();
-//			}
-//		}
-//		catch (IOException e)
-//		{
-//			e.printStackTrace();
-//		}
-//
-//		return "Something went wrong";
-//	}
-//
-//	public String postLevelUp(String player, HashMap<String, String> levelUpData)
-//	{
-//		RequestBody formBody = new FormBody.Builder()
-//			.add("level", levelUpData.get("level"))
-//			.build();
-//
-//		Request request = new Request.Builder()
-//			.url(runeManagerConfig.url() + "/api/account/" + player + "/skill/" + levelUpData.get("name"))
-//			.addHeader("Authorization", "Bearer " + plugin.userToken)
-//			.post(formBody)
-//			.build();
-//
-//		try (Response response = httpClient.newCall(request).execute())
-//		{
-//			if (response.code() == 200)
-//			{
-//				return "Successfully submitted level up for " + levelUpData.get("name") + " to RuneManager!";
-//			}
-//			else
-//			{
-//				return response.body().string();
-//			}
-//		}
-//		catch (IOException e)
-//		{
-//			e.printStackTrace();
-//		}
-//
-//		return "Something went wrong";
-//	}
-//
-	public String postEquipment(String player, JsonArray equipment)
+	public String sendPutRequest(String endPoint, String json)
 	{
 		Request request = new Request.Builder()
-			.url(runeManagerConfig.url() + "/api/account/" + player + "/equipment")
-			.addHeader("Authorization", "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIxIiwianRpIjoiM2NiZjdhNjUxNDUyYTVlZDBjNTRkMDUyNzdlMDllNTAxYTdiNjlmYjY1YzQ0YzhjN2M2ODg4YzFjZWRkOTM5MzlkYTFkMjNlZGEwNDkyZGYiLCJpYXQiOiIxNjEzMjUyNjk3LjcwODE5MSIsIm5iZiI6IjE2MTMyNTI2OTcuNzA4MTk1IiwiZXhwIjoiMTY0NDc4ODY5Ny41Njk3MjAiLCJzdWIiOiIxIiwic2NvcGVzIjpbXX0.kbJW_XbOy2IBUYbaNr1tBdn7bH-MqlXSSKgdNmQ1vzPxU0TXDkj7kTL-D4K3SqSj4USZQjh7lYE88BTVGet9fFjqCQEkymngGaSjlMdgqkuD-r3afrkK-IW3I4azWuCh-MgHzNEVjo2300MWfiSZghpLrMK3_wUCMgKDBRyKsRQYxmIHUTdBsXQ0ctei1efbfebApeHHOskF3JxhrI6DiSQCTv1eKBWG9MJGweRTRfUVhpQhz17QYLBeqzdg2USRZCYSb8XdM24uXucWzO9MUnqfrz6iewza8vx5iFn1RH82b2lu4OO9l1uDHR1_oGal1ggdtBaWBMzA2elpFIl2IwAI9ZX9K52ZttcAGi6obgGQNsXZlxpI9806tM-e_jI6lpPL8GJ31u6OJqxzu28rwaXd-g0m-GqU36fsbsf2xovT2-tDKYmMkM9W1fDHlim9V0JTHn75rNIMFs80geiUDnKRD54KXhGuKvr_O92ryAU-cdtL6gNno5V0GXkC783PjmmDeKfCtnOQnRrNpqc-yGdFWRgB3la8iL5GwhqKhoFk6IPbQRICK3ZJPILx7No3Il6HN9QkPGrbaPrU8ixk-D7K9vTWg2Il2Y4G7u_ZcwJ6-2ow0VX8APBHlU2x6pB0WnmaPaxCortWWEtuRCIjQTBfZfv1GrVPAQdtKBjivqc")
-			.post(RequestBody.create(MEDIA_TYPE_MARKDOWN, String.valueOf(equipment)))
+			.url(runeManagerConfig.url() + endPoint)
+			.addHeader("Authorization", "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIxIiwianRpIjoiMWZiZDAxNjBiNDY0ZDYwM2U4YWZhOGNlYmNjODM3YzUzMmExOTU5NDU5Njg4MzZhN2QxNmIzODE5MGVlMDIxNzNhMTNjOTYyYzViZTMxYzIiLCJpYXQiOiIxNjEzNjgxNTM0Ljk0MDMzNiIsIm5iZiI6IjE2MTM2ODE1MzQuOTQwMzM5IiwiZXhwIjoiMTY0NTIxNzUzNC44Nzk4NDMiLCJzdWIiOiIxIiwic2NvcGVzIjpbXX0.A2oJPTB9AsQrSKK8UZqToEeGoRyFx5-F0zAzJWj9-Hb3cD_ooIrYPT4SIp9Q1lmmYTlsxA4FjrJnWW7WqO8HoRyjoD7oiSPUKsINOn80pDKebdE2TJR8zl4giNaRN7tCozbAqKkvJ0V4FwCDdPyUZRFpBCI9lQQT1Zhcy_Ts_k2Y1Cgu9AOp2F20LXmgEM1pKGF0D_PeSaQoyP0npzJnCqUIdwmLAKGYSXRaTTXRAmnMed21QNGKS3QdD2FKngRWsXF0k4mey9CJKKK_Kd1djP0421eDD4VX-SHDJLTWj0VUhH_MMatPJij0MEU5UqyWW-k5mJmKkaO7z9z-8LwHeZV_gUJgHXAQqnaVBJNN3pw1DwffDU3GkQFGLImDh-AZKK2o-LpLKIe85g6mWTi8K7Dq0WbzjJhIg2xzLWbYbKkcVsh4pi7yRj-oJ-_l36O-BVAMrHk4uR4zq702IHC5Uz7iFsS1Y3WxJUf-iai283JfoSaapRnj2D0qP7QLZeiWjE1WbqB6PFosWrSMur2qFQYF4U7aullR9dCqGCWc6of6eCkh_7mapB8lfPTnzbWtM_PExQu3mmkmFIK2MnWeFxIOvodgGWe_D78KqpJBnhQM_8ZdjvMyW2jyMuztyBKiZIIOfzP2eDjQnf96gGZEKBk7f1MF-u0J3tGUFKCp8OQ")
+			.put(RequestBody.create(MEDIA_TYPE_MARKDOWN, json))
 			.build();
 
 		try (Response response = httpClient.newCall(request).execute())
 		{
 			if (response.code() == 200)
 			{
-				return "Successfully submitted equipment to RuneManager!";
-			}
-			else
-			{
 				return response.body().string();
 			}
+
+			return "Error: " + response.code() + " - " + response.body().string();
 		}
 		catch (IOException e)
 		{
 			e.printStackTrace();
 		}
-//
-		return "Something went wrong";
+
+		return "Something went wrong!";
 	}
-//
-//	public String postLootCrate(String player, LinkedHashMap<String, String> loot)
-//	{
-//		String collectionJson = gson.toJson(loot);
-//
-//		Request request = new Request.Builder()
-//			.url(runeManagerConfig.url() + "/api/account/" + player + "/lootcrate")
-//			.addHeader("Authorization", "Bearer " + plugin.userToken)
-//			.post(RequestBody.create(MEDIA_TYPE_MARKDOWN, collectionJson))
-//			.build();
-//
-//		try (Response response = httpClient.newCall(request).execute())
-//		{
-//			if (response.code() == 200)
-//			{
-//				return "Successfully submitted loot crate loot for  to RuneManager!";
-//			}
-//			else
-//			{
-//				return response.body().string();
-//			}
-//		}
-//		catch (IOException e)
-//		{
-//			e.printStackTrace();
-//		}
-//
-//		return "Something went wrong";
-//	}
-//
-//	public String postBank(String player, JsonArray bank)
-//	{
-//		Request request = new Request.Builder()
-//			.url(runeManagerConfig.url() + "/api/account/" + player + "/bank")
-//			.addHeader("Authorization", "Bearer " + plugin.userToken)
-//			.post(RequestBody.create(MEDIA_TYPE_MARKDOWN, String.valueOf(bank)))
-//			.build();
-//
-//		try (Response response = httpClient.newCall(request).execute())
-//		{
-//			if (response.code() == 200)
-//			{
-//				return "Successfully submitted bank to RuneManager!";
-//			}
-//			else
-//			{
-//				return response.body().string();
-//			}
-//		}
-//		catch (IOException e)
-//		{
-//			e.printStackTrace();
-//		}
-//
-//		return "Something went wrong";
-//	}
-//
-//	public String postQuests(String player, JsonArray quests)
-//	{
-//		Request request = new Request.Builder()
-//			.url(runeManagerConfig.url() + "/api/account/" + player + "/quests")
-//			.addHeader("Authorization", "Bearer " + plugin.userToken)
-//			.post(RequestBody.create(MEDIA_TYPE_MARKDOWN, String.valueOf(quests)))
-//			.build();
-//
-//		try (Response response = httpClient.newCall(request).execute())
-//		{
-//			if (response.code() == 200)
-//			{
-//				return "Successfully submitted quests to RuneManager!";
-//			}
-//			else
-//			{
-//				return response.body().string();
-//			}
-//		}
-//		catch (IOException e)
-//		{
-//			e.printStackTrace();
-//		}
-//
-//		return "Something went wrong";
-//	}
 }
