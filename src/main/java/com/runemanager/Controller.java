@@ -24,6 +24,9 @@ public class Controller
 	@Inject
 	private RuneManagerConfig runeManagerConfig;
 
+	@Inject
+	private RuneManagerPlugin plugin;
+
 	public AvailableCollections[] getBossOverview()
 	{
 		Request request = new Request.Builder()
@@ -149,20 +152,25 @@ public class Controller
 
 	public String sendPostRequest(String endPoint, String json)
 	{
+		if ((plugin.getUserToken() == null || plugin.getUserToken().isEmpty()) || !plugin.isAccountLoggedIn())
+		{
+			return plugin.accountUsername + " is not logged in to RuneManager. Restart the plugin or RuneLite";
+		}
+
 		Request request = new Request.Builder()
 			.url(runeManagerConfig.url() + endPoint)
-			.addHeader("Authorization", "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIxIiwianRpIjoiMWZiZDAxNjBiNDY0ZDYwM2U4YWZhOGNlYmNjODM3YzUzMmExOTU5NDU5Njg4MzZhN2QxNmIzODE5MGVlMDIxNzNhMTNjOTYyYzViZTMxYzIiLCJpYXQiOiIxNjEzNjgxNTM0Ljk0MDMzNiIsIm5iZiI6IjE2MTM2ODE1MzQuOTQwMzM5IiwiZXhwIjoiMTY0NTIxNzUzNC44Nzk4NDMiLCJzdWIiOiIxIiwic2NvcGVzIjpbXX0.A2oJPTB9AsQrSKK8UZqToEeGoRyFx5-F0zAzJWj9-Hb3cD_ooIrYPT4SIp9Q1lmmYTlsxA4FjrJnWW7WqO8HoRyjoD7oiSPUKsINOn80pDKebdE2TJR8zl4giNaRN7tCozbAqKkvJ0V4FwCDdPyUZRFpBCI9lQQT1Zhcy_Ts_k2Y1Cgu9AOp2F20LXmgEM1pKGF0D_PeSaQoyP0npzJnCqUIdwmLAKGYSXRaTTXRAmnMed21QNGKS3QdD2FKngRWsXF0k4mey9CJKKK_Kd1djP0421eDD4VX-SHDJLTWj0VUhH_MMatPJij0MEU5UqyWW-k5mJmKkaO7z9z-8LwHeZV_gUJgHXAQqnaVBJNN3pw1DwffDU3GkQFGLImDh-AZKK2o-LpLKIe85g6mWTi8K7Dq0WbzjJhIg2xzLWbYbKkcVsh4pi7yRj-oJ-_l36O-BVAMrHk4uR4zq702IHC5Uz7iFsS1Y3WxJUf-iai283JfoSaapRnj2D0qP7QLZeiWjE1WbqB6PFosWrSMur2qFQYF4U7aullR9dCqGCWc6of6eCkh_7mapB8lfPTnzbWtM_PExQu3mmkmFIK2MnWeFxIOvodgGWe_D78KqpJBnhQM_8ZdjvMyW2jyMuztyBKiZIIOfzP2eDjQnf96gGZEKBk7f1MF-u0J3tGUFKCp8OQ")
+			.addHeader("Authorization", "Bearer " + plugin.getUserToken())
 			.post(RequestBody.create(MEDIA_TYPE_MARKDOWN, json))
 			.build();
 
 		try (Response response = httpClient.newCall(request).execute())
 		{
-			if (response.code() == 200 || response.code() == 201)
+			if (!response.isSuccessful())
 			{
-				return response.body().string();
+				return "Error: " + response.code() + " - " + response.body().string();
 			}
 
-			return "Error: " + response.code() + " - " + response.body().string();
+			return response.body().string();
 		}
 		catch (IOException e)
 		{
@@ -174,20 +182,25 @@ public class Controller
 
 	public String sendPutRequest(String endPoint, String json)
 	{
+		if ((plugin.getUserToken() == null || plugin.getUserToken().isEmpty()) || !plugin.isAccountLoggedIn())
+		{
+			return plugin.accountUsername + " is not registered on RuneManager.";
+		}
+
 		Request request = new Request.Builder()
 			.url(runeManagerConfig.url() + endPoint)
-			.addHeader("Authorization", "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIxIiwianRpIjoiMWZiZDAxNjBiNDY0ZDYwM2U4YWZhOGNlYmNjODM3YzUzMmExOTU5NDU5Njg4MzZhN2QxNmIzODE5MGVlMDIxNzNhMTNjOTYyYzViZTMxYzIiLCJpYXQiOiIxNjEzNjgxNTM0Ljk0MDMzNiIsIm5iZiI6IjE2MTM2ODE1MzQuOTQwMzM5IiwiZXhwIjoiMTY0NTIxNzUzNC44Nzk4NDMiLCJzdWIiOiIxIiwic2NvcGVzIjpbXX0.A2oJPTB9AsQrSKK8UZqToEeGoRyFx5-F0zAzJWj9-Hb3cD_ooIrYPT4SIp9Q1lmmYTlsxA4FjrJnWW7WqO8HoRyjoD7oiSPUKsINOn80pDKebdE2TJR8zl4giNaRN7tCozbAqKkvJ0V4FwCDdPyUZRFpBCI9lQQT1Zhcy_Ts_k2Y1Cgu9AOp2F20LXmgEM1pKGF0D_PeSaQoyP0npzJnCqUIdwmLAKGYSXRaTTXRAmnMed21QNGKS3QdD2FKngRWsXF0k4mey9CJKKK_Kd1djP0421eDD4VX-SHDJLTWj0VUhH_MMatPJij0MEU5UqyWW-k5mJmKkaO7z9z-8LwHeZV_gUJgHXAQqnaVBJNN3pw1DwffDU3GkQFGLImDh-AZKK2o-LpLKIe85g6mWTi8K7Dq0WbzjJhIg2xzLWbYbKkcVsh4pi7yRj-oJ-_l36O-BVAMrHk4uR4zq702IHC5Uz7iFsS1Y3WxJUf-iai283JfoSaapRnj2D0qP7QLZeiWjE1WbqB6PFosWrSMur2qFQYF4U7aullR9dCqGCWc6of6eCkh_7mapB8lfPTnzbWtM_PExQu3mmkmFIK2MnWeFxIOvodgGWe_D78KqpJBnhQM_8ZdjvMyW2jyMuztyBKiZIIOfzP2eDjQnf96gGZEKBk7f1MF-u0J3tGUFKCp8OQ")
+			.addHeader("Authorization", "Bearer " + plugin.getUserToken())
 			.put(RequestBody.create(MEDIA_TYPE_MARKDOWN, json))
 			.build();
 
 		try (Response response = httpClient.newCall(request).execute())
 		{
-			if (response.code() == 200)
+			if (!response.isSuccessful())
 			{
-				return response.body().string();
+				return "Error: " + response.code() + " - " + response.body().string();
 			}
 
-			return "Error: " + response.code() + " - " + response.body().string();
+			return response.body().string();
 		}
 		catch (IOException e)
 		{

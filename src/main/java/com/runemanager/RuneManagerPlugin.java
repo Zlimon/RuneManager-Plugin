@@ -218,6 +218,21 @@ public class RuneManagerPlugin extends Plugin
 	private JsonArray oldBank = new JsonArray();
 	private JsonArray newBank = new JsonArray();
 
+	@Getter
+	public String userToken;
+
+	@Getter
+	public String accountUsername;
+
+	@Getter
+	public boolean accountLoggedIn;
+
+	@Inject
+	private UserController userController;
+
+	@Inject
+	private AccountController accountController;
+
 	@Inject
 	private ItemManager itemManager;
 
@@ -327,13 +342,21 @@ public class RuneManagerPlugin extends Plugin
 	@Override
 	protected void startUp() throws Exception
 	{
+		if (getUserToken() == null)
+		{
+			userController.logInUser();
+		}
+
 //		ignoredEvents = Text.fromCSV(config.getIgnoredEvents());
 	}
 
 	@Override
 	protected void shutDown()
 	{
+		userToken = null;
+
 //		submitLoot();
+
 		lootTrackerClient.setUuid(null);
 		chestLooted = false;
 	}
@@ -354,6 +377,11 @@ public class RuneManagerPlugin extends Plugin
 		if (event.getGameState() == GameState.LOADING && !client.isInInstancedRegion())
 		{
 			chestLooted = false;
+		}
+
+		if (event.getGameState() == GameState.LOGIN_SCREEN && isAccountLoggedIn())
+		{
+			accountController.logOutAccount();
 		}
 	}
 
@@ -696,6 +724,32 @@ public class RuneManagerPlugin extends Plugin
 	@Subscribe
 	private void onGameTick(GameTick event)
 	{
+		if (accountUsername == null)
+		{
+			accountUsername = client.getLocalPlayer().getName();
+
+			accountController.logInAccount();
+
+			dataSubmittedChatMessage(isAccountLoggedIn() ? "You are now using RuneManager with " + accountUsername : "Could not verify this account to your RuneManager user");
+		}
+		else if (!accountUsername.equals(client.getLocalPlayer().getName()))
+		{
+			dataSubmittedChatMessage("Detected another account! Relogging this account to RuneManager...");
+
+			accountController.logOutAccount();
+
+			accountUsername = client.getLocalPlayer().getName();
+
+			accountController.logInAccount();
+
+			dataSubmittedChatMessage(isAccountLoggedIn() ? "You are now using RuneManager with " + accountUsername : "Could not verify this account to your RuneManager user");
+		}
+
+		if (getUserToken() == null || getUserToken().isEmpty() && !isAccountLoggedIn())
+		{
+			return;
+		}
+
 		if (wintertodtLootWidgetOpen)
 		{
 			wintertodtLootWidgetOpen = false;
