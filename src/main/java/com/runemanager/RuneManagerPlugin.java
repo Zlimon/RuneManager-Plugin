@@ -724,6 +724,13 @@ public class RuneManagerPlugin extends Plugin
 							itemObject.addProperty("name", itemNameMatcher.group(2));
 						}
 
+						final ItemComposition itemComposition = itemManager.getItemComposition(child.getItemId());
+						final int gePrice = itemManager.getItemPrice(child.getItemId());
+						final int haPrice = itemComposition.getHaPrice();
+
+						itemObject.addProperty("gePrice", gePrice);
+						itemObject.addProperty("haPrice", haPrice);
+
 						oldBank.add(itemObject);
 						newBank.add(itemObject);
 					}
