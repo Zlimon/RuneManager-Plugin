@@ -220,12 +220,15 @@ public class RuneManagerPlugin extends Plugin
 
 	@Getter
 	public String userToken;
+	public boolean ifUserToken() { return (getUserToken() != null && !getUserToken().isEmpty()); }
 
 	@Getter
 	public String accountUsername;
-
 	@Getter
-	public boolean accountLoggedIn;
+	public boolean accountLoggedIn = false;
+	public boolean ifAccountLoggedIn() { return ((getAccountUsername() != null || !getAccountUsername().isEmpty()) && accountLoggedIn); }
+
+
 
 	@Inject
 	private UserController userController;
@@ -379,7 +382,7 @@ public class RuneManagerPlugin extends Plugin
 			chestLooted = false;
 		}
 
-		if (event.getGameState() == GameState.LOGIN_SCREEN && isAccountLoggedIn())
+		if (event.getGameState() == GameState.LOGIN_SCREEN)
 		{
 			accountController.logOutAccount();
 		}
@@ -724,28 +727,15 @@ public class RuneManagerPlugin extends Plugin
 	@Subscribe
 	private void onGameTick(GameTick event)
 	{
-		if (accountUsername == null)
-		{
+		if (getAccountUsername() == null || getAccountUsername().isEmpty()) {
 			accountUsername = client.getLocalPlayer().getName();
 
 			accountController.logInAccount();
 
-			dataSubmittedChatMessage(isAccountLoggedIn() ? "You are now using RuneManager with " + accountUsername : "Could not verify this account to your RuneManager user");
-		}
-		else if (!accountUsername.equals(client.getLocalPlayer().getName()))
-		{
-			dataSubmittedChatMessage("Detected another account! Relogging this account to RuneManager...");
-
-			accountController.logOutAccount();
-
-			accountUsername = client.getLocalPlayer().getName();
-
-			accountController.logInAccount();
-
-			dataSubmittedChatMessage(isAccountLoggedIn() ? "You are now using RuneManager with " + accountUsername : "Could not verify this account to your RuneManager user");
+			dataSubmittedChatMessage(ifAccountLoggedIn() ? "You are now using RuneManager with " + accountUsername : "Could not verify this account to your RuneManager user");
 		}
 
-		if (getUserToken() == null || getUserToken().isEmpty() && !isAccountLoggedIn())
+		if (!ifUserToken() || !ifAccountLoggedIn())
 		{
 			return;
 		}

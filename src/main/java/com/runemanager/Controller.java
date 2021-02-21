@@ -152,7 +152,7 @@ public class Controller
 
 	public String sendPostRequest(String endPoint, String json)
 	{
-		if ((plugin.getUserToken() == null || plugin.getUserToken().isEmpty()) || !plugin.isAccountLoggedIn())
+		if (!plugin.ifUserToken() || !plugin.ifAccountLoggedIn())
 		{
 			return plugin.accountUsername + " is not logged in to RuneManager. Restart the plugin or RuneLite";
 		}
@@ -182,9 +182,9 @@ public class Controller
 
 	public String sendPutRequest(String endPoint, String json)
 	{
-		if ((plugin.getUserToken() == null || plugin.getUserToken().isEmpty()) || !plugin.isAccountLoggedIn())
+		if (!plugin.ifUserToken() || !plugin.ifAccountLoggedIn())
 		{
-			return plugin.accountUsername + " is not registered on RuneManager.";
+			return plugin.accountUsername + " is not logged in to RuneManager. Restart the plugin or RuneLite";
 		}
 
 		Request request = new Request.Builder()

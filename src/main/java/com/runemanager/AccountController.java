@@ -85,7 +85,7 @@ public class AccountController
 
 	public void logInAccount()
 	{
-		if (client.getGameState() != GameState.LOGGED_IN || (plugin.getUserToken() == null || plugin.getUserToken().isEmpty()) || plugin.isAccountLoggedIn())
+		if (client.getGameState() != GameState.LOGGED_IN || !plugin.ifUserToken() || plugin.isAccountLoggedIn())
 		{
 			return;
 		}
@@ -121,12 +121,16 @@ public class AccountController
 
 	public void logOutAccount()
 	{
-		if ((plugin.getUserToken() == null || plugin.getUserToken().isEmpty()) && plugin.isAccountLoggedIn())
+		if (!plugin.ifUserToken())
 		{
 			return;
 		}
 
-		String locationString = ""; // TODO
+		String locationString = "";
+
+		if (client.getGameState() == GameState.LOGGED_IN) {
+			locationString = gson.toJson(client.getLocalPlayer().getLocalLocation());
+		}
 
 		Request request = new Request.Builder()
 			.url(runeManagerConfig.url() + "/api/account/" + plugin.accountUsername + "/logout")
@@ -136,13 +140,7 @@ public class AccountController
 
 		try (Response response = httpClient.newCall(request).execute())
 		{
-			if (!response.isSuccessful())
-			{
-				plugin.accountLoggedIn = false;
-
-				return;
-			}
-
+			plugin.accountUsername = null;
 			plugin.accountLoggedIn = false;
 		}
 		catch (IOException e)
@@ -150,6 +148,7 @@ public class AccountController
 			e.printStackTrace();
 		}
 
+		plugin.accountUsername = null;
 		plugin.accountLoggedIn = false;
 	}
 }
