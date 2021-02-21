@@ -84,6 +84,7 @@ import net.runelite.client.account.AccountSession;
 import net.runelite.client.account.SessionManager;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.chat.ChatColorType;
+import net.runelite.client.chat.ChatCommandManager;
 import net.runelite.client.chat.ChatMessageBuilder;
 import net.runelite.client.chat.ChatMessageManager;
 import net.runelite.client.chat.QueuedMessage;
@@ -263,6 +264,9 @@ public class RuneManagerPlugin extends Plugin
 	@Inject
 	private Controller controller;
 
+	@Inject
+	private ChatCommandManager chatCommandManager;
+
 	@VisibleForTesting
 	String eventType;
 	@VisibleForTesting
@@ -350,6 +354,8 @@ public class RuneManagerPlugin extends Plugin
 			userController.logInUser();
 		}
 
+		chatCommandManager.registerCommandAsync(AccountController.AUTH_COMMAND_STRING, accountController::authenticatePlayer);
+
 //		ignoredEvents = Text.fromCSV(config.getIgnoredEvents());
 	}
 
@@ -357,6 +363,8 @@ public class RuneManagerPlugin extends Plugin
 	protected void shutDown()
 	{
 		userToken = null;
+
+		chatCommandManager.unregisterCommand(AccountController.AUTH_COMMAND_STRING);
 
 //		submitLoot();
 
