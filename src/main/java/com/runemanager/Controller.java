@@ -61,9 +61,7 @@ public class Controller
 
 	public String postLootStack(String name, LootRecord loot)
 	{
-		String player = "Jern Zlimon"; // WIP
-
-		String endPoint = "/api/account/" + player + "/loot/" + name.toLowerCase();
+		String endPoint = "/api/account/" + plugin.getAccountUsername() + "/loot/" + name.toLowerCase();
 
 		String lootString = gson.toJson(loot);
 
@@ -89,9 +87,7 @@ public class Controller
 
 	public String postCollectionLog(String categoryTitle, List<CollectionLogItem> collectionLogItems, Integer obtainedCount, Integer killCount)
 	{
-		String player = "Jern Zlimon"; // WIP
-
-		String endPoint = "/api/account/" + player + "/collection/" + categoryTitle.toLowerCase();
+		String endPoint = "/api/account/" + plugin.getAccountUsername() + "/collection/" + categoryTitle.toLowerCase();
 
 		JsonArray collectionLogItemsJsonArray = gson.toJsonTree(collectionLogItems).getAsJsonArray();
 
@@ -108,9 +104,7 @@ public class Controller
 
 	public String postLevelUp(HashMap<String, String> levelUpData)
 	{
-		String player = "Jern Zlimon"; // WIP
-
-		String endPoint = "/api/account/" + player + "/skill/" + levelUpData.get("name");
+		String endPoint = "/api/account/" + plugin.getAccountUsername() + "/skill/" + levelUpData.get("name");
 
 		String levelUpString = gson.toJson(levelUpData);
 
@@ -119,9 +113,7 @@ public class Controller
 
 	public String postEquipment(JsonArray equipment)
 	{
-		String player = "Jern Zlimon"; // WIP
-
-		String endPoint = "/api/account/" + player + "/equipment";
+		String endPoint = "/api/account/" + plugin.getAccountUsername() + "/equipment";
 
 		String equipmentString = gson.toJson(equipment);
 
@@ -130,9 +122,7 @@ public class Controller
 
 	public String postBank(JsonArray bank)
 	{
-		String player = "Jern Zlimon"; // WIP
-
-		String endPoint = "/api/account/" + player + "/bank";
+		String endPoint = "/api/account/" + plugin.getAccountUsername() + "/bank";
 
 		String bankString = gson.toJson(bank);
 
@@ -141,9 +131,7 @@ public class Controller
 
 	public String postQuests(JsonArray quests)
 	{
-		String player = "Jern Zlimon"; // WIP
-
-		String endPoint = "/api/account/" + player + "/quests";
+		String endPoint = "/api/account/" + plugin.getAccountUsername() + "/quests";
 
 		String postString = gson.toJson(quests);
 
