@@ -229,7 +229,7 @@ public class RuneManagerPlugin extends Plugin
 	public boolean accountLoggedIn = false;
 	public boolean ifAccountLoggedIn() { return ((getAccountUsername() != null || !getAccountUsername().isEmpty()) && accountLoggedIn); }
 
-
+	private AvailableCollections[] collections = null;
 
 	@Inject
 	private UserController userController;
@@ -356,6 +356,11 @@ public class RuneManagerPlugin extends Plugin
 
 		chatCommandManager.registerCommandAsync(AccountController.AUTH_COMMAND_STRING, accountController::authenticatePlayer);
 
+		if (collections == null && !config.url().isEmpty())
+		{
+			collections = controller.getBossOverview();
+		}
+
 //		ignoredEvents = Text.fromCSV(config.getIgnoredEvents());
 	}
 
@@ -419,11 +424,19 @@ public class RuneManagerPlugin extends Plugin
 	public void onNpcLootReceived(final NpcLootReceived npcLootReceived)
 	{
 		final NPC npc = npcLootReceived.getNpc();
-		final Collection<ItemStack> items = npcLootReceived.getItems();
-		final String name = npc.getName();
-		final int combat = npc.getCombatLevel();
 
-		addLoot(name, combat, LootRecordType.NPC, npc.getId(), items);
+		// Find if NPC is available for loot tracking
+		for (AvailableCollections availableCollections : collections)
+		{
+			if (availableCollections.getAlias().equals(npc.getName()))
+			{
+				final Collection<ItemStack> items = npcLootReceived.getItems();
+				final String name = npc.getName();
+				final int combat = npc.getCombatLevel();
+
+				addLoot(name, combat, LootRecordType.NPC, npc.getId(), items);
+			}
+		}
 	}
 
 	@Subscribe
