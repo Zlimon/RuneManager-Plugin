@@ -34,6 +34,8 @@ import com.google.common.collect.Multisets;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.inject.Provides;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -80,6 +82,7 @@ import net.runelite.api.events.WidgetLoaded;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetID;
 import net.runelite.api.widgets.WidgetInfo;
+import net.runelite.client.RuneLite;
 import net.runelite.client.account.AccountSession;
 import net.runelite.client.account.SessionManager;
 import net.runelite.client.callback.ClientThread;
@@ -196,93 +199,66 @@ public class RuneManagerPlugin extends Plugin
 	private static final Set<Integer> SOUL_WARS_REGIONS = ImmutableSet.of(8493, 8749, 9005);
 
 	private static final Set<Character> VOWELS = ImmutableSet.of('a', 'e', 'i', 'o', 'u');
-
-	private final Map<String, List<CollectionLogItem>> obtainedItems = new HashMap<>();
-
 	private static final Pattern ITEM_NAME_PATTERN = Pattern.compile("<col=(.+?)>(.+?)</col>");
-
 	private static final int COLLECTION_LOG_GROUP_ID = 621;
 	private static final int COLLECTION_LOG_CONTAINER = 1;
 	private static final int COLLECTION_LOG_CATEGORY_HEAD = 19;
 	private static final int COLLECTION_LOG_CATEGORY_ITEMS = 35;
 	private static final int COLLECTION_LOG_DRAW_LIST_SCRIPT_ID = 2730;
 	private static final int COLLECTION_LOG_CATEGORY_VARBIT_INDEX = 2049;
-
-	private boolean wintertodtLootWidgetOpen;
-	private boolean levelUpWidgetOpen;
-	private boolean bankWidgetOpen;
-	private boolean questLogMenuOpen;
-
 	private static final Pattern WINTERTODT_LOOT_PATTERN = Pattern.compile("You have earned: (.+?).");
 	private static final Pattern LEVEL_UP_PATTERN = Pattern.compile(".*Your ([a-zA-Z]+) (?:level is|are)? now (\\d+)\\.");
-
-	private JsonArray oldBank = new JsonArray();
-	private JsonArray newBank = new JsonArray();
-
+	private final Map<String, List<CollectionLogItem>> obtainedItems = new HashMap<>();
+	private final List<String> ignoredItems = new ArrayList<>();
+	private final List<String> ignoredEvents = new ArrayList<>();
+	private final List<LootRecord> queuedLoots = new ArrayList<>();
 	@Getter
 	public String userToken;
-	public boolean ifUserToken() { return (getUserToken() != null && !getUserToken().isEmpty()); }
-
 	@Getter
 	public String accountUsername;
 	@Getter
 	public boolean accountLoggedIn = false;
-	public boolean ifAccountLoggedIn() { return ((getAccountUsername() != null || !getAccountUsername().isEmpty()) && accountLoggedIn); }
-
-	private AvailableCollections[] collections = null;
-
-	@Inject
-	private UserController userController;
-
-	@Inject
-	private AccountController accountController;
-
-	@Inject
-	private ItemManager itemManager;
-
-	@Inject
-	private RuneManagerConfig config;
-
-	@Inject
-	private Client client;
-
-	@Inject
-	private ClientThread clientThread;
-
-	@Inject
-	private SessionManager sessionManager;
-
-	@Inject
-	private EventBus eventBus;
-
-	@Inject
-	private ChatMessageManager chatMessageManager;
-
-	@Inject
-	private LootManager lootManager;
-
-	@Inject
-	private Controller controller;
-
-	@Inject
-	private ChatCommandManager chatCommandManager;
-
 	@VisibleForTesting
 	String eventType;
 	@VisibleForTesting
 	LootRecordType lootRecordType;
+	private boolean wintertodtLootWidgetOpen;
+	private boolean levelUpWidgetOpen;
+	private boolean bankWidgetOpen;
+	private boolean questLogMenuOpen;
+	private JsonArray oldBank = new JsonArray();
+	private JsonArray newBank = new JsonArray();
+	private AvailableCollections[] collections = null;
+	@Inject
+	private UserController userController;
+	@Inject
+	private AccountController accountController;
+	@Inject
+	private ItemManager itemManager;
+	@Inject
+	private RuneManagerConfig config;
+	@Inject
+	private Client client;
+	@Inject
+	private ClientThread clientThread;
+	@Inject
+	private SessionManager sessionManager;
+	@Inject
+	private EventBus eventBus;
+	@Inject
+	private ChatMessageManager chatMessageManager;
+	@Inject
+	private LootManager lootManager;
+	@Inject
+	private Controller controller;
+	@Inject
+	private ChatCommandManager chatCommandManager;
 	private Object metadata;
 	private boolean chestLooted;
-
-	private final List<String> ignoredItems = new ArrayList<>();
-	private final List<String> ignoredEvents = new ArrayList<>();
-
 	private Multiset<Integer> inventorySnapshot;
-
 	@Getter(AccessLevel.PACKAGE)
 	@Inject
 	private LootTrackerClient lootTrackerClient;
-	private final List<LootRecord> queuedLoots = new ArrayList<>();
 
 	private static Collection<ItemStack> stack(Collection<ItemStack> items)
 	{
@@ -311,6 +287,23 @@ public class RuneManagerPlugin extends Plugin
 		}
 
 		return list;
+	}
+
+	private static Collection<GameItem> toGameItems(Collection<ItemStack> items)
+	{
+		return items.stream()
+			.map(item -> new GameItem(item.getId(), item.getQuantity()))
+			.collect(Collectors.toList());
+	}
+
+	public boolean ifUserToken()
+	{
+		return (getUserToken() != null && !getUserToken().isEmpty());
+	}
+
+	public boolean ifAccountLoggedIn()
+	{
+		return ((getAccountUsername() != null || !getAccountUsername().isEmpty()) && accountLoggedIn);
 	}
 
 	@Provides
@@ -755,7 +748,8 @@ public class RuneManagerPlugin extends Plugin
 	@Subscribe
 	private void onGameTick(GameTick event)
 	{
-		if (getAccountUsername() == null || getAccountUsername().isEmpty()) {
+		if (getAccountUsername() == null || getAccountUsername().isEmpty())
+		{
 			accountUsername = client.getLocalPlayer().getName();
 
 			accountController.logInAccount();
@@ -989,13 +983,6 @@ public class RuneManagerPlugin extends Plugin
 		return itemStacks.stream()
 			.map(itemStack -> buildLootTrackerItem(itemStack.getId(), itemStack.getQuantity()))
 			.toArray(LootTrackerItem[]::new);
-	}
-
-	private static Collection<GameItem> toGameItems(Collection<ItemStack> items)
-	{
-		return items.stream()
-			.map(item -> new GameItem(item.getId(), item.getQuantity()))
-			.collect(Collectors.toList());
 	}
 
 	private Collection<LootTrackerRecord> convertToLootTrackerRecord(final Collection<LootAggregate> records)
