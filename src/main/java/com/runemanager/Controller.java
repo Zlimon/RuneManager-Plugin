@@ -61,7 +61,7 @@ public class Controller
 
 	public String postLootStack(String name, LootRecord loot)
 	{
-		String endPoint = "/api/account/" + plugin.getAccountUsername() + "/loot/" + name.toLowerCase();
+		String endPoint = "/api/account/" + plugin.getAccountUsername() + "/loot/" + name;
 
 		String lootString = gson.toJson(loot);
 
@@ -87,7 +87,7 @@ public class Controller
 
 	public String postCollectionLog(String categoryTitle, List<CollectionLogItem> collectionLogItems, Integer obtainedCount, Integer killCount)
 	{
-		String endPoint = "/api/account/" + plugin.getAccountUsername() + "/collection/" + categoryTitle.toLowerCase();
+		String endPoint = "/api/account/" + plugin.getAccountUsername() + "/collection/" + categoryTitle;
 
 		JsonArray collectionLogItemsJsonArray = gson.toJsonTree(collectionLogItems).getAsJsonArray();
 
