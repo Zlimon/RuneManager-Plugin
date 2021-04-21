@@ -73,4 +73,14 @@ public interface RuneManagerConfig extends Config
 	{
 		return false;
 	}
+
+	@ConfigItem(
+			keyName = "submitBank",
+			name = "Submit bank data",
+			description = "Submit data from bank."
+	)
+	default boolean submitBank()
+	{
+		return false;
+	}
 }

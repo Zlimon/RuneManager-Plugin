@@ -212,6 +212,7 @@ public class RuneManagerPlugin extends Plugin
 	private final List<String> ignoredItems = new ArrayList<>();
 	private final List<String> ignoredEvents = new ArrayList<>();
 	private final List<LootRecord> queuedLoots = new ArrayList<>();
+	private final int SECONDS_BETWEEN_GET = 5;
 	@Getter
 	public String userToken;
 	@Getter
@@ -814,7 +815,7 @@ public class RuneManagerPlugin extends Plugin
 			dataSubmittedChatMessage(controller.postLevelUp(levelUpData));
 		}
 
-		if (bankWidgetOpen)
+		if (bankWidgetOpen && config.submitBank())
 		{
 			bankWidgetOpen = false;
 
@@ -1260,6 +1261,21 @@ public class RuneManagerPlugin extends Plugin
 		}
 
 		dataSubmittedChatMessage(controller.postQuests(questCategory));
+	}
+
+	@Schedule(
+			period = SECONDS_BETWEEN_GET,
+			unit = ChronoUnit.SECONDS,
+			asynchronous = true
+	)
+	public void attemptGetRequest()
+	{
+		log.debug("Attempt get request");
+		String[] notifications = controller.getRecentNotifications();
+
+		for (String notification : notifications) {
+			dataSubmittedChatMessage(notification);
+		}
 	}
 
 	public void dataSubmittedChatMessage(String chatMessage)

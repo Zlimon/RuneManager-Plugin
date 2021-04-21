@@ -59,6 +59,37 @@ public class Controller
 		return null;
 	}
 
+	public String[] getRecentNotifications()
+	{
+		Request request = new Request.Builder()
+				.url(runeManagerConfig.url() + "/api/broadcast/recent/announcement")
+				.build();
+
+		try (Response response = httpClient.newCall(request).execute())
+		{
+			if (!response.isSuccessful())
+			{
+				throw new IOException("Unexpected code " + response);
+			}
+
+			String collectionData = response.body().string();
+
+			System.out.println(collectionData);
+
+			JsonArray collectionOverview = gson.fromJson(collectionData, JsonArray.class);
+
+			System.out.println(collectionOverview);
+
+			return gson.fromJson(collectionOverview, String[].class);
+		}
+		catch (IOException e)
+		{
+			e.printStackTrace();
+		}
+
+		return null;
+	}
+
 	public String postLootStack(String name, LootRecord loot)
 	{
 		String endPoint = "/api/account/" + plugin.getAccountUsername() + "/loot/" + name;
