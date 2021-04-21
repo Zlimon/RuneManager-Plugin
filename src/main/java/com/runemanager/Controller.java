@@ -2,25 +2,30 @@ package com.runemanager;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
-import okhttp3.*;
-
-import javax.inject.Inject;
+import com.google.gson.JsonObject;
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
+import java.util.List;
+import javax.inject.Inject;
+import net.runelite.http.api.loottracker.LootRecord;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
 
 public class Controller
 {
+	private static final MediaType MEDIA_TYPE_MARKDOWN
+		= MediaType.parse("application/json; charset=utf-8");
+	private final OkHttpClient httpClient = new OkHttpClient();
+	private final Gson gson = new Gson();
+
 	@Inject
 	private RuneManagerConfig runeManagerConfig;
 
 	@Inject
 	private RuneManagerPlugin plugin;
-
-	private final OkHttpClient httpClient = new OkHttpClient();
-	private final Gson gson = new Gson();
-	private static final MediaType MEDIA_TYPE_MARKDOWN
-		= MediaType.parse("application/json; charset=utf-8");
 
 	public AvailableCollections[] getBossOverview()
 	{
@@ -54,202 +59,173 @@ public class Controller
 		return null;
 	}
 
-	public String postLootStack(String player, String collectionName, LinkedHashMap<String, String> loot)
+	public String[] getRecentNotifications()
 	{
-		String collectionJson = gson.toJson(loot);
-
 		Request request = new Request.Builder()
-			.url(runeManagerConfig.url() + "/api/account/" + player + "/loot/" + collectionName)
-			.addHeader("Authorization", "Bearer " + plugin.userToken)
-			.put(RequestBody.create(MEDIA_TYPE_MARKDOWN, collectionJson))
-			.build();
+				.url(runeManagerConfig.url() + "/api/broadcast/recent/announcement")
+				.build();
 
 		try (Response response = httpClient.newCall(request).execute())
 		{
-			if (response.code() == 200)
+			if (!response.isSuccessful())
 			{
-				return "Successfully submitted kill for " + collectionName + " to RuneManager!";
+				throw new IOException("Unexpected code " + response);
 			}
-			else
-			{
-				return response.body().string();
-			}
+
+			String collectionData = response.body().string();
+
+			System.out.println(collectionData);
+
+			JsonArray collectionOverview = gson.fromJson(collectionData, JsonArray.class);
+
+			System.out.println(collectionOverview);
+
+			return gson.fromJson(collectionOverview, String[].class);
 		}
 		catch (IOException e)
 		{
 			e.printStackTrace();
 		}
 
-		return "Something went wrong";
+		return null;
 	}
 
-	public String postCollectionLog(String player, String collectionName, LinkedHashMap<String, Integer> loot)
+	public String postLootStack(String name, LootRecord loot)
 	{
-		String collectionJson = gson.toJson(loot);
+		String endPoint = "/api/account/" + plugin.getAccountUsername() + "/loot/" + name;
 
-		Request request = new Request.Builder()
-			.url(runeManagerConfig.url() + "/api/account/" + player + "/collection/" + collectionName)
-			.addHeader("Authorization", "Bearer " + plugin.userToken)
-			.post(RequestBody.create(MEDIA_TYPE_MARKDOWN, collectionJson))
-			.build();
+		String lootString = gson.toJson(loot);
 
-		try (Response response = httpClient.newCall(request).execute())
-		{
-			if (response.code() == 200)
-			{
-				return "Successfully submitted collection log for " + collectionName + " to RuneManager!";
-			}
-			else
-			{
-				return response.body().string();
-			}
-		}
-		catch (IOException e)
-		{
-			e.printStackTrace();
-		}
-
-		return "Something went wrong";
+		return sendPutRequest(endPoint, lootString);
 	}
 
-	public String postLevelUp(String player, HashMap<String, String> levelUpData)
+//	public String postLootCrate(String name, LinkedHashMap<String, String> loot)
+//	{
+//		String player = "Jern Zlimon"; // WIP
+//
+//		String endPoint = "/api/account/" + player + "/lootcrate";
+//
+//		String lootString = gson.toJson(loot);
+//
+//		Integer responseCode = sendPutRequest(endPoint, lootString);
+//
+//		if (responseCode == 200) {
+//			return "Successfully submitted loot crate loot for " + name + " to RuneManager!";
+//		}
+//
+//		return "Something went wrong";
+//	}
+
+	public String postCollectionLog(String categoryTitle, List<CollectionLogItem> collectionLogItems, Integer obtainedCount, Integer killCount)
 	{
-		RequestBody formBody = new FormBody.Builder()
-			.add("level", levelUpData.get("level"))
-			.build();
+		String endPoint = "/api/account/" + plugin.getAccountUsername() + "/collection/" + categoryTitle;
 
-		Request request = new Request.Builder()
-			.url(runeManagerConfig.url() + "/api/account/" + player + "/skill/" + levelUpData.get("name"))
-			.addHeader("Authorization", "Bearer " + plugin.userToken)
-			.post(formBody)
-			.build();
+		JsonArray collectionLogItemsJsonArray = gson.toJsonTree(collectionLogItems).getAsJsonArray();
 
-		try (Response response = httpClient.newCall(request).execute())
-		{
-			if (response.code() == 200)
-			{
-				return "Successfully submitted level up for " + levelUpData.get("name") + " to RuneManager!";
-			}
-			else
-			{
-				return response.body().string();
-			}
-		}
-		catch (IOException e)
-		{
-			e.printStackTrace();
-		}
+		JsonObject collectionLogJsonObject = new JsonObject();
+		collectionLogJsonObject.add("collectionLogItems", collectionLogItemsJsonArray);
 
-		return "Something went wrong";
+		collectionLogJsonObject.addProperty("obtained", Integer.toString(obtainedCount));
+		collectionLogJsonObject.addProperty("kill_count", Integer.toString(killCount));
+
+		String collectionLogString = gson.toJson(collectionLogJsonObject);
+
+		return sendPostRequest(endPoint, collectionLogString);
 	}
 
-	public String postEquipment(String player, JsonArray equipment)
+	public String postLevelUp(HashMap<String, String> levelUpData)
 	{
-		Request request = new Request.Builder()
-			.url(runeManagerConfig.url() + "/api/account/" + player + "/equipment")
-			.addHeader("Authorization", "Bearer " + plugin.userToken)
-			.post(RequestBody.create(MEDIA_TYPE_MARKDOWN, String.valueOf(equipment)))
-			.build();
+		String endPoint = "/api/account/" + plugin.getAccountUsername() + "/skill/" + levelUpData.get("name");
 
-		try (Response response = httpClient.newCall(request).execute())
-		{
-			if (response.code() == 200)
-			{
-				return "Successfully submitted equipment to RuneManager!";
-			}
-			else
-			{
-				return response.body().string();
-			}
-		}
-		catch (IOException e)
-		{
-			e.printStackTrace();
-		}
+		String levelUpString = gson.toJson(levelUpData);
 
-		return "Something went wrong";
+		return sendPostRequest(endPoint, levelUpString);
 	}
 
-	public String postLootCrate(String player, LinkedHashMap<String, String> loot)
+	public String postEquipment(JsonArray equipment)
 	{
-		String collectionJson = gson.toJson(loot);
+		String endPoint = "/api/account/" + plugin.getAccountUsername() + "/equipment";
 
-		Request request = new Request.Builder()
-			.url(runeManagerConfig.url() + "/api/account/" + player + "/lootcrate")
-			.addHeader("Authorization", "Bearer " + plugin.userToken)
-			.post(RequestBody.create(MEDIA_TYPE_MARKDOWN, collectionJson))
-			.build();
+		String equipmentString = gson.toJson(equipment);
 
-		try (Response response = httpClient.newCall(request).execute())
-		{
-			if (response.code() == 200)
-			{
-				return "Successfully submitted loot crate loot for  to RuneManager!";
-			}
-			else
-			{
-				return response.body().string();
-			}
-		}
-		catch (IOException e)
-		{
-			e.printStackTrace();
-		}
-
-		return "Something went wrong";
+		return sendPostRequest(endPoint, equipmentString);
 	}
 
-	public String postBank(String player, JsonArray bank)
+	public String postBank(JsonArray bank)
 	{
-		Request request = new Request.Builder()
-			.url(runeManagerConfig.url() + "/api/account/" + player + "/bank")
-			.addHeader("Authorization", "Bearer " + plugin.userToken)
-			.post(RequestBody.create(MEDIA_TYPE_MARKDOWN, String.valueOf(bank)))
-			.build();
+		String endPoint = "/api/account/" + plugin.getAccountUsername() + "/bank";
 
-		try (Response response = httpClient.newCall(request).execute())
-		{
-			if (response.code() == 200)
-			{
-				return "Successfully submitted bank to RuneManager!";
-			}
-			else
-			{
-				return response.body().string();
-			}
-		}
-		catch (IOException e)
-		{
-			e.printStackTrace();
-		}
+		String bankString = gson.toJson(bank);
 
-		return "Something went wrong";
+		return sendPostRequest(endPoint, bankString);
 	}
 
-	public String postQuests(String player, JsonArray quests)
+	public String postQuests(JsonArray quests)
 	{
+		String endPoint = "/api/account/" + plugin.getAccountUsername() + "/quests";
+
+		String postString = gson.toJson(quests);
+
+		return sendPostRequest(endPoint, postString);
+	}
+
+	public String sendPostRequest(String endPoint, String json)
+	{
+		if (!plugin.ifUserToken() || !plugin.ifAccountLoggedIn())
+		{
+			return plugin.accountUsername + " is not logged in to RuneManager. Restart the plugin or RuneLite";
+		}
+
 		Request request = new Request.Builder()
-			.url(runeManagerConfig.url() + "/api/account/" + player + "/quests")
-			.addHeader("Authorization", "Bearer " + plugin.userToken)
-			.post(RequestBody.create(MEDIA_TYPE_MARKDOWN, String.valueOf(quests)))
+			.url(runeManagerConfig.url() + endPoint)
+			.addHeader("Authorization", "Bearer " + plugin.getUserToken())
+			.post(RequestBody.create(MEDIA_TYPE_MARKDOWN, json))
 			.build();
 
 		try (Response response = httpClient.newCall(request).execute())
 		{
-			if (response.code() == 200)
+			if (!response.isSuccessful())
 			{
-				return "Successfully submitted quests to RuneManager!";
+				return "Error: " + response.code() + " - " + response.body().string();
 			}
-			else
-			{
-				return response.body().string();
-			}
+
+			return response.body().string();
 		}
 		catch (IOException e)
 		{
 			e.printStackTrace();
 		}
 
-		return "Something went wrong";
+		return "Something went wrong!";
+	}
+
+	public String sendPutRequest(String endPoint, String json)
+	{
+		if (!plugin.ifUserToken() || !plugin.ifAccountLoggedIn())
+		{
+			return plugin.accountUsername + " is not logged in to RuneManager. Restart the plugin or RuneLite";
+		}
+
+		Request request = new Request.Builder()
+			.url(runeManagerConfig.url() + endPoint)
+			.addHeader("Authorization", "Bearer " + plugin.getUserToken())
+			.put(RequestBody.create(MEDIA_TYPE_MARKDOWN, json))
+			.build();
+
+		try (Response response = httpClient.newCall(request).execute())
+		{
+			if (!response.isSuccessful())
+			{
+				return "Error: " + response.code() + " - " + response.body().string();
+			}
+
+			return response.body().string();
+		}
+		catch (IOException e)
+		{
+			e.printStackTrace();
+		}
+
+		return "Something went wrong!";
 	}
 }

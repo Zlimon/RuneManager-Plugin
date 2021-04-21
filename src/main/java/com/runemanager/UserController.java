@@ -5,6 +5,8 @@ import com.google.gson.Gson;
 import com.google.gson.JsonPrimitive;
 import java.io.IOException;
 import javax.inject.Inject;
+import lombok.Getter;
+import lombok.Setter;
 import okhttp3.FormBody;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -19,22 +21,16 @@ public class UserController
 	@Inject
 	private RuneManagerConfig runeManagerConfig;
 
-	@Inject
-	private AccountController accountController;
+	private final OkHttpClient httpClient = new OkHttpClient();
+	private final Gson gson = new Gson();
 
 	public void logInUser()
 	{
-		if (plugin.ifUserLoggedIn())
-		{
-			return;
-		}
-
 		if (Strings.isNullOrEmpty(runeManagerConfig.url())
 			|| Strings.isNullOrEmpty(runeManagerConfig.username())
 			|| Strings.isNullOrEmpty(runeManagerConfig.password()))
 		{
-			plugin.userToken = "";
-			plugin.userLoggedIn = false;
+			plugin.userToken = null;
 
 			return;
 		}
@@ -49,72 +45,33 @@ public class UserController
 			.post(formBody)
 			.build();
 
-		OkHttpClient httpClient = new OkHttpClient();
-
 		try (Response response = httpClient.newCall(request).execute())
 		{
 			if (!response.isSuccessful())
 			{
-				plugin.sendChatMessage(response.body().string());
+//				return "Error: " + response.code() + " - " + response.body().string();
+				plugin.userToken = null;
 
-				throw new IOException("Unexpected code " + response);
+				return;
 			}
-
-			Gson gson = new Gson();
 
 			JsonPrimitive authTokenObject = gson.fromJson(response.body().string(), JsonPrimitive.class);
 
 			if (Strings.isNullOrEmpty(authTokenObject.toString()))
 			{
-				plugin.userToken = "";
-				plugin.userLoggedIn = false;
+				plugin.userToken = null;
 
-				plugin.sendChatMessage("Could not log in to RuneManager. Did not get user token.");
+//				plugin.dataSubmittedChatMessage("Could not log in to RuneManager. Did not get user token.");
+				return;
 			}
-			else
-			{
-				plugin.userToken = authTokenObject.toString().replace("\"", "");
 
-				if (!plugin.userToken.isEmpty())
-				{
-					plugin.userLoggedIn = true;
-
-					if (!plugin.accountUsername.isEmpty())
-					{
-						if (!plugin.ifAccountLoggedIn())
-						{
-							accountController.logInAccount();
-
-							if (plugin.ifAccountLoggedIn())
-							{
-								plugin.sendChatMessage("Successfully logged in to RuneManager with account " + plugin.accountUsername + ".");
-							}
-							else
-							{
-								plugin.sendChatMessage("Successfully logged in to RuneManager, but could not connect with account " + plugin.accountUsername + ".");
-							}
-						}
-						else
-						{
-							plugin.sendChatMessage("1Successfully logged in to RuneManager, but could not connect with account " + plugin.accountUsername + ".");
-						}
-					} else {
-						plugin.sendChatMessage("Successfully logged in to RuneManager.");
-					}
-				}
-			}
+			plugin.userToken = authTokenObject.toString().replace("\"", "");
 		}
 		catch (IOException e)
 		{
 			e.printStackTrace();
+
+			plugin.userToken = null;
 		}
-	}
-
-	public void logOutUser()
-	{
-		accountController.logOutAccount();
-
-		plugin.userToken = "";
-		plugin.userLoggedIn = false;
 	}
 }
