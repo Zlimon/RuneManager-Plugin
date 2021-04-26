@@ -3,6 +3,8 @@ package com.runemanager;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
@@ -95,6 +97,28 @@ public class Controller
 		String endPoint = "/api/account/" + plugin.getAccountUsername() + "/loot/" + name;
 
 		String lootString = gson.toJson(loot);
+
+		try {
+			File jsonLog = new File("loot.json");
+			if (jsonLog.createNewFile()) {
+				System.out.println("File created: " + jsonLog.getName());
+			} else {
+				System.out.println("File already exists.");
+			}
+		} catch (IOException e) {
+			System.out.println("An error occurred.");
+			e.printStackTrace();
+		}
+
+		try {
+			FileWriter jsonWriter = new FileWriter("loot.json");
+			jsonWriter.write(lootString);
+			jsonWriter.close();
+			System.out.println("Successfully wrote to the file.");
+		} catch (IOException e) {
+			System.out.println("An error occurred.");
+			e.printStackTrace();
+		}
 
 		return sendPutRequest(endPoint, lootString);
 	}
