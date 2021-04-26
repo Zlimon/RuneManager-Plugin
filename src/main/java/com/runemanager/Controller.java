@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import javax.inject.Inject;
+import net.runelite.client.RuneLite;
 import net.runelite.http.api.loottracker.LootRecord;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
@@ -98,22 +99,13 @@ public class Controller
 
 		String lootString = gson.toJson(loot);
 
-		try {
-			File jsonLog = new File("loot.json");
-			if (jsonLog.createNewFile()) {
-				System.out.println("File created: " + jsonLog.getName());
-			} else {
-				System.out.println("File already exists.");
-			}
-		} catch (IOException e) {
-			System.out.println("An error occurred.");
-			e.printStackTrace();
-		}
+		String fileName = RuneLite.RUNELITE_DIR + "\\loot.json";
 
-		try {
-			FileWriter jsonWriter = new FileWriter("loot.json");
-			jsonWriter.write(lootString);
-			jsonWriter.close();
+		try
+		{
+			FileWriter writer = new FileWriter(fileName, true);
+			writer.write(lootString + "\r\n");
+			writer.close();
 			System.out.println("Successfully wrote to the file.");
 		} catch (IOException e) {
 			System.out.println("An error occurred.");
