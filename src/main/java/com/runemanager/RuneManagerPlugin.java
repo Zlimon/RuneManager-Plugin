@@ -1130,12 +1130,20 @@ public class RuneManagerPlugin extends Plugin
 			String[] itemAndQuantity = lootString.split(" x ");
 
 			String itemName = itemAndQuantity[0].replaceFirst(" ", ""); // For some reason there is a redundant zero
-			List<ItemPrice> itemIdSearch = itemManager.search(itemName);
 
 			int itemId = 0;
-			if (itemIdSearch.size() > 0)
-			{
-				itemId = itemIdSearch.get(0).getId();
+
+			if (itemName.equals("Coins")) {
+				itemId = 995;
+			} else {
+				List<ItemPrice> itemIdSearch = itemManager.search(itemName);
+
+				if (itemIdSearch.size() > 0)
+				{
+					itemId = itemIdSearch.get(0).getId();
+				} else {
+					continue;
+				}
 			}
 
 			Item item = new Item(itemId, Integer.parseInt(itemAndQuantity[1]));
