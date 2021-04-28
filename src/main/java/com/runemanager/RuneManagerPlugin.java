@@ -227,8 +227,7 @@ public class RuneManagerPlugin extends Plugin
 	private boolean levelUpWidgetOpen;
 	private boolean bankWidgetOpen;
 	private boolean questLogMenuOpen;
-	private JsonArray oldBank = new JsonArray();
-	private JsonArray newBank = new JsonArray();
+	private JsonArray bank = new JsonArray();
 	private AvailableCollections[] collections = null;
 	@Inject
 	private UserController userController;
@@ -703,7 +702,7 @@ public class RuneManagerPlugin extends Plugin
 	@Subscribe
 	public void onScriptPostFired(ScriptPostFired event)
 	{
-		if (event.getScriptId() == ScriptID.BANKMAIN_BUILD && newBank.size() == 0)
+		if (event.getScriptId() == ScriptID.BANKMAIN_BUILD)
 		{
 			// Compute bank prices using only the shown items so that we can show bank value during searches
 			final Widget bankItemContainer = client.getWidget(WidgetInfo.BANK_ITEM_CONTAINER);
@@ -738,8 +737,7 @@ public class RuneManagerPlugin extends Plugin
 						itemObject.addProperty("gePrice", gePrice);
 						itemObject.addProperty("haPrice", haPrice);
 
-						oldBank.add(itemObject);
-						newBank.add(itemObject);
+						bank.add(itemObject);
 					}
 				}
 			}
@@ -819,16 +817,7 @@ public class RuneManagerPlugin extends Plugin
 		{
 			bankWidgetOpen = false;
 
-			if (oldBank == newBank)
-			{
-				newBank = new JsonArray();
-
-				return;
-			}
-
-			dataSubmittedChatMessage(controller.postBank(newBank));
-
-			oldBank = newBank;
+			dataSubmittedChatMessage(controller.postBank(bank));
 		}
 
 		if (questLogMenuOpen)
