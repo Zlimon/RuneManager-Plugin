@@ -166,9 +166,9 @@ public class Controller
 	public String postBank(JsonArray bank)
 	{
 		String endPoint = "/api/account/" + plugin.getAccountUsername() + "/bank";
-System.out.println("submit bank");
+
 		String bankString = gson.toJson(bank);
-		System.out.println(bankString);
+
 		return sendPostRequest(endPoint, bankString);
 	}
 

@@ -31,11 +31,10 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Multiset;
 import com.google.common.collect.Multisets;
+import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.inject.Provides;
-import java.io.FileWriter;
-import java.io.IOException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -529,7 +528,6 @@ public class RuneManagerPlugin extends Plugin
 			}
 			case (WidgetID.BANK_GROUP_ID):
 			{
-				System.out.println("bank open");
 				bankWidgetOpen = true;
 				container = null;
 				break;
@@ -703,22 +701,21 @@ public class RuneManagerPlugin extends Plugin
 	@Subscribe
 	public void onScriptPostFired(ScriptPostFired event)
 	{
-		System.out.println(bank.size());
-		if (event.getScriptId() == ScriptID.BANKMAIN_BUILD && bankWidgetOpen && bank.size() == 0)
+		if (config.submitBank() && event.getScriptId() == ScriptID.BANKMAIN_BUILD && bankWidgetOpen)
 		{
 			bankWidgetOpen = false;
-			System.out.println("script fired");
+
 			// Compute bank prices using only the shown items so that we can show bank value during searches
 			final Widget bankItemContainer = client.getWidget(WidgetInfo.BANK_ITEM_CONTAINER);
 			final ItemContainer bankContainer = client.getItemContainer(InventoryID.BANK);
 			final Widget[] children = bankItemContainer.getChildren();
-			long geTotal = 0, haTotal = 0;
 
 			if (bankContainer != null && children != null)
 			{
 				log.debug("Computing bank price of {} items", bankContainer.size());
 
-				System.out.println("benedicte er søt");
+				JsonArray newBank = new JsonArray();
+
 				// The first components are the bank items, followed by tabs etc. There are always 816 components regardless
 				// of bank size, but we only need to check up to the bank size.
 				for (int i = 0; i < bankContainer.size(); ++i)
@@ -736,16 +733,24 @@ public class RuneManagerPlugin extends Plugin
 							itemObject.addProperty("name", itemNameMatcher.group(2));
 						}
 
-						geTotal += (long) itemManager.getItemPrice(child.getItemId()) * child.getItemQuantity();
+						final int gePrice = itemManager.getItemPrice(child.getItemId());
 
-						itemObject.addProperty("gePrice", geTotal);
+						itemObject.addProperty("gePrice", gePrice);
 
-						bank.add(itemObject);
+						newBank.add(itemObject);
 					}
 				}
 
-				System.out.println("test123");
-				System.out.println(geTotal);
+				Gson gson = new Gson();
+				String oldBank = gson.toJson(bank);
+				String newString = gson.toJson(newBank);
+
+				if (oldBank.equals(newString))
+				{
+					return;
+				}
+
+				bank = newBank;
 
 				dataSubmittedChatMessage(controller.postBank(bank));
 			}
@@ -820,13 +825,6 @@ public class RuneManagerPlugin extends Plugin
 
 			dataSubmittedChatMessage(controller.postLevelUp(levelUpData));
 		}
-
-//		if (bankWidgetOpen && config.submitBank())
-//		{
-//			bankWidgetOpen = false;
-//			System.out.println("submit bank");
-//			dataSubmittedChatMessage(controller.postBank(bank));
-//		}
 
 		if (questLogMenuOpen)
 		{
