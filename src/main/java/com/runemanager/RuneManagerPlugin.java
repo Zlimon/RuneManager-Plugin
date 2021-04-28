@@ -529,6 +529,7 @@ public class RuneManagerPlugin extends Plugin
 			}
 			case (WidgetID.BANK_GROUP_ID):
 			{
+				System.out.println("bank open");
 				bankWidgetOpen = true;
 				container = null;
 				break;
@@ -702,17 +703,22 @@ public class RuneManagerPlugin extends Plugin
 	@Subscribe
 	public void onScriptPostFired(ScriptPostFired event)
 	{
-		if (event.getScriptId() == ScriptID.BANKMAIN_BUILD)
+		System.out.println(bank.size());
+		if (event.getScriptId() == ScriptID.BANKMAIN_BUILD && bankWidgetOpen && bank.size() == 0)
 		{
+			bankWidgetOpen = false;
+			System.out.println("script fired");
 			// Compute bank prices using only the shown items so that we can show bank value during searches
 			final Widget bankItemContainer = client.getWidget(WidgetInfo.BANK_ITEM_CONTAINER);
 			final ItemContainer bankContainer = client.getItemContainer(InventoryID.BANK);
 			final Widget[] children = bankItemContainer.getChildren();
+			long geTotal = 0, haTotal = 0;
 
 			if (bankContainer != null && children != null)
 			{
 				log.debug("Computing bank price of {} items", bankContainer.size());
 
+				System.out.println("benedicte er søt");
 				// The first components are the bank items, followed by tabs etc. There are always 816 components regardless
 				// of bank size, but we only need to check up to the bank size.
 				for (int i = 0; i < bankContainer.size(); ++i)
@@ -730,16 +736,18 @@ public class RuneManagerPlugin extends Plugin
 							itemObject.addProperty("name", itemNameMatcher.group(2));
 						}
 
-						final ItemComposition itemComposition = itemManager.getItemComposition(child.getItemId());
-						final int gePrice = itemManager.getItemPrice(child.getItemId());
-						final int haPrice = itemComposition.getHaPrice();
+						geTotal += (long) itemManager.getItemPrice(child.getItemId()) * child.getItemQuantity();
 
-						itemObject.addProperty("gePrice", gePrice);
-						itemObject.addProperty("haPrice", haPrice);
+						itemObject.addProperty("gePrice", geTotal);
 
 						bank.add(itemObject);
 					}
 				}
+
+				System.out.println("test123");
+				System.out.println(geTotal);
+
+				dataSubmittedChatMessage(controller.postBank(bank));
 			}
 		}
 	}
@@ -813,12 +821,12 @@ public class RuneManagerPlugin extends Plugin
 			dataSubmittedChatMessage(controller.postLevelUp(levelUpData));
 		}
 
-		if (bankWidgetOpen && config.submitBank())
-		{
-			bankWidgetOpen = false;
-
-			dataSubmittedChatMessage(controller.postBank(bank));
-		}
+//		if (bankWidgetOpen && config.submitBank())
+//		{
+//			bankWidgetOpen = false;
+//			System.out.println("submit bank");
+//			dataSubmittedChatMessage(controller.postBank(bank));
+//		}
 
 		if (questLogMenuOpen)
 		{

@@ -77,11 +77,7 @@ public class Controller
 
 			String collectionData = response.body().string();
 
-			System.out.println(collectionData);
-
 			JsonArray collectionOverview = gson.fromJson(collectionData, JsonArray.class);
-
-			System.out.println(collectionOverview);
 
 			return gson.fromJson(collectionOverview, String[].class);
 		}
@@ -170,9 +166,9 @@ public class Controller
 	public String postBank(JsonArray bank)
 	{
 		String endPoint = "/api/account/" + plugin.getAccountUsername() + "/bank";
-
+System.out.println("submit bank");
 		String bankString = gson.toJson(bank);
-
+		System.out.println(bankString);
 		return sendPostRequest(endPoint, bankString);
 	}
 
