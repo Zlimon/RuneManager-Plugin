@@ -420,13 +420,12 @@ public class RuneManagerPlugin extends Plugin
 		// Find if NPC is available for loot tracking
 		for (AvailableCollections availableCollections : collections)
 		{
-			if (availableCollections.getAlias().equals(npc.getName()))
+			if (availableCollections.getName().equals(npc.getName()))
 			{
 				final Collection<ItemStack> items = npcLootReceived.getItems();
-				final String name = npc.getName();
 				final int combat = npc.getCombatLevel();
 
-				addLoot(name, combat, LootRecordType.NPC, npc.getId(), items);
+				addLoot(availableCollections.getSlug(), combat, LootRecordType.NPC, npc.getId(), items);
 			}
 		}
 	}

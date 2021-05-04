@@ -3,7 +3,7 @@ package com.runemanager;
 public class AvailableCollections
 {
 	private String name;
-	private String alias;
+	private String slug;
 	private String model;
 
 	public String getName()
@@ -11,9 +11,9 @@ public class AvailableCollections
 		return name;
 	}
 
-	public String getAlias()
+	public String getSlug()
 	{
-		return alias;
+		return slug;
 	}
 
 	public String getModel()
